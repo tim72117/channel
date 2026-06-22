@@ -49,7 +49,7 @@ struct MembersView: View {
     }
 }
 
-/// 搜尋並邀請朋友加入頻道。
+/// 輸入 email 邀請使用者加入頻道。
 private struct InviteFriendView: View {
     let channel: Channel
     let existing: [User]
@@ -57,40 +57,60 @@ private struct InviteFriendView: View {
 
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var keyword = ""
-    @State private var results: [User] = []
+    @State private var email = ""
+    @State private var isAdding = false
+    @State private var errorMessage: String?
+    @FocusState private var focused: Bool
 
     var body: some View {
-        List(results) { user in
-            let already = existing.contains { $0.id == user.id }
-            HStack(spacing: 12) {
-                AvatarView(user: user)
-                Text(user.name)
-                Spacer()
-                if already {
-                    Text("已加入").font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Button("加入") { Task { await add(user) } }
-                        .buttonStyle(.borderedProminent).controlSize(.small)
+        Form {
+            Section {
+                TextField("輸入對方的 Email", text: $email)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focused)
+            } footer: {
+                Text("輸入已註冊使用者的 Email,即可邀請加入此頻道。")
+            }
+
+            Section {
+                Button {
+                    Task { await invite() }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isAdding { ProgressView() } else { Text("邀請加入") }
+                        Spacer()
+                    }
                 }
+                .disabled(!canInvite || isAdding)
+            }
+
+            if let errorMessage {
+                Section { Text(errorMessage).foregroundStyle(.red).font(.callout) }
             }
         }
-        .navigationTitle("加朋友")
+        .navigationTitle("加入成員")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $keyword, prompt: "搜尋使用者")
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } } }
-        .task(id: keyword) { await search() }
+        .onAppear { focused = true }
     }
 
-    private func search() async {
-        do { results = try await app.backend.searchUsers(keyword: keyword) }
-        catch { }
-    }
+    private var canInvite: Bool { email.contains("@") }
 
-    private func add(_ user: User) async {
+    private func invite() async {
+        let e = email.trimmingCharacters(in: .whitespaces).lowercased()
+        isAdding = true
+        errorMessage = nil
+        defer { isAdding = false }
         do {
-            let updated = try await app.backend.addMember(channelID: channel.id, userID: user.id)
+            let updated = try await app.backend.addMember(channelID: channel.id, email: e)
             onAdded(updated)
-        } catch { }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

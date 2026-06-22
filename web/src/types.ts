@@ -22,10 +22,22 @@ export interface Message {
   createdAt: string // ISO8601
 }
 
+// User 是公開身分(成員列表、訊息作者等),不含私密資料。
 export interface User {
   id: string
   name: string
   avatarColor: string
+}
+
+// Profile 是私密資料,只在「自己的帳號」端點回傳。
+export interface Profile {
+  email: string
+}
+
+// Me 是登入後的自己:公開身分 + 私密資料。GET /v1/me 回傳此結構。
+export interface Me {
+  user: User
+  profile: Profile
 }
 
 export interface SearchAnswer {
@@ -34,10 +46,11 @@ export interface SearchAnswer {
   confidence?: number
 }
 
-// POST /v1/auth/apple 的回應
+// login / register / apple 的回應:Me + token。
 export interface AuthResponse {
   token: string
   user: User
+  profile: Profile
 }
 
 // 後端統一錯誤格式:{ "error": { "code", "message" } }

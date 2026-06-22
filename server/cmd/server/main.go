@@ -12,6 +12,7 @@ import (
 	"github.com/channel/server/internal/llm"
 	"github.com/channel/server/internal/model"
 	"github.com/channel/server/internal/store"
+	"github.com/channel/server/internal/wanttools"
 )
 
 func main() {
@@ -47,6 +48,19 @@ func main() {
 			log.Fatalf("初始化 want 分析器失敗: %v", err)
 		}
 		analyzer = pool
+		// 注入條目持久化:record_entry 工具解析出的條目寫進 DB,關聯到觸發的訊息。
+		wanttools.BindSink(func(messageID, channelID string, e wanttools.RecordedEntry) error {
+			return st.InsertEntry(model.Entry{
+				ID:        "ent_" + randHex(),
+				MessageID: messageID,
+				ChannelID: channelID,
+				Item:      e.Item,
+				Start:     e.Start,
+				End:       e.End,
+				AllDay:    e.AllDay,
+				CreatedAt: nowUTC(),
+			})
+		})
 		log.Printf("LLM 分析器: want 引擎(WantPool)")
 	} else {
 		log.Printf("LLM 分析器: 規則式")

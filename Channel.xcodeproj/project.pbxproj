@@ -26,12 +26,10 @@
 		DE34C73BBD19C10EDAF23B53 /* MockBackendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E845140DD70751DFBB00D628 /* MockBackendService.swift */; };
 		E89C837B1D1772C178E09B70 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F9EC4B6F611338E25BD8625 /* SettingsView.swift */; };
 		EA3FC1B6F62E7548BA3B16D7 /* TokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2DD174DC02FAE0C8A4E51F /* TokenStore.swift */; };
-		F6BCFDCB7A2CE2467B897730 /* SemanticSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A30D742887A528D3B33341C /* SemanticSearchView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		01040E171402257D24C22488 /* BackendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendService.swift; sourceTree = "<group>"; };
-		0A30D742887A528D3B33341C /* SemanticSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchView.swift; sourceTree = "<group>"; };
 		13FC59A0FFC4398739E98ECB /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
 		38CE53DBEEFA0A697B0923C3 /* ChannelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelStore.swift; sourceTree = "<group>"; };
 		447FFA9136EF9BB1DE65EEBC /* ChannelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelApp.swift; sourceTree = "<group>"; };
@@ -119,7 +117,6 @@
 				F2BC44C617B2EDC578077662 /* Channels */,
 				354A617E81D59F87E6B9983F /* Chat */,
 				AEB885B7D0BB5119CB18864F /* Members */,
-				D2683BAE089DB74CCF50CA04 /* Search */,
 				C581DF4496BC0523FA608B32 /* Settings */,
 				7CA12595286BBB00347D2087 /* Shared */,
 			);
@@ -156,14 +153,6 @@
 				4F9EC4B6F611338E25BD8625 /* SettingsView.swift */,
 			);
 			path = Settings;
-			sourceTree = "<group>";
-		};
-		D2683BAE089DB74CCF50CA04 /* Search */ = {
-			isa = PBXGroup;
-			children = (
-				0A30D742887A528D3B33341C /* SemanticSearchView.swift */,
-			);
-			path = Search;
 			sourceTree = "<group>";
 		};
 		EEBCCBACD5B097F6BF25F504 /* Models */ = {
@@ -260,7 +249,6 @@
 				DE34C73BBD19C10EDAF23B53 /* MockBackendService.swift in Sources */,
 				9FD4C87AF192344710978EEA /* RootView.swift in Sources */,
 				5F0FC918F92A21966CACE28B /* SearchAnswer.swift in Sources */,
-				F6BCFDCB7A2CE2467B897730 /* SemanticSearchView.swift in Sources */,
 				E89C837B1D1772C178E09B70 /* SettingsView.swift in Sources */,
 				EA3FC1B6F62E7548BA3B16D7 /* TokenStore.swift in Sources */,
 				2CDA1B461D5D72106549ABB7 /* User.swift in Sources */,

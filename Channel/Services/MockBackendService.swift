@@ -17,6 +17,21 @@ final class MockBackendService: BackendService {
         return user
     }
 
+    func register(email: String, password: String, name: String?) async throws -> User {
+        try await fakeDelay(0.4)
+        let display = (name?.isEmpty == false ? name! : email)
+        let user = User(id: "usr_\(abs(email.hashValue))", name: display, avatarColor: "#4A90D9")
+        currentUser = user
+        return user
+    }
+
+    func signIn(email: String, password: String) async throws -> User {
+        try await fakeDelay(0.4)
+        let user = User(id: "usr_\(abs(email.hashValue))", name: email, avatarColor: "#4A90D9")
+        currentUser = user
+        return user
+    }
+
     func setAuthToken(_ token: String?) {
         // Mock 無 token 概念,忽略。
     }
@@ -36,10 +51,11 @@ final class MockBackendService: BackendService {
 
     init() {
         let now = Date()
-        let ch1 = Channel(id: "ch_001", name: "產品討論", memberCount: 3,
+        // ch_001:我是 owner(可發訊息);ch_002:他人 owner(我是成員,只能查詢)。
+        let ch1 = Channel(id: "ch_001", name: "產品討論", ownerID: "usr_me", memberCount: 3,
                           lastMessagePreview: "下週一開會敲定 Q3 規格",
                           updatedAt: now.addingTimeInterval(-300))
-        let ch2 = Channel(id: "ch_002", name: "旅遊計畫", memberCount: 2,
+        let ch2 = Channel(id: "ch_002", name: "旅遊計畫", ownerID: "usr_carol", memberCount: 2,
                           lastMessagePreview: "機票買好了嗎?",
                           updatedAt: now.addingTimeInterval(-7200))
         channels = [ch1, ch2]
@@ -84,7 +100,8 @@ final class MockBackendService: BackendService {
     func createChannel(name: String) async throws -> Channel {
         try await fakeDelay(0.3)
         let ch = Channel(id: "ch_\(UUID().uuidString.prefix(6))", name: name,
-                         memberCount: 1, lastMessagePreview: nil, updatedAt: .now)
+                         ownerID: currentUser.id, memberCount: 1,
+                         lastMessagePreview: nil, updatedAt: .now)
         channels.append(ch)
         messagesByChannel[ch.id] = []
         membersByChannel[ch.id] = [currentUser]
@@ -130,13 +147,15 @@ final class MockBackendService: BackendService {
         return membersByChannel[channelID] ?? []
     }
 
-    func addMember(channelID: String, userID: String) async throws -> [User] {
+    func addMember(channelID: String, email: String) async throws -> [User] {
         try await fakeDelay(0.3)
-        guard let user = directory.first(where: { $0.id == userID }) else {
-            throw BackendError.notFound
-        }
+        // 以 email 前綴比對內建使用者(例如 alice@... → Alice);否則用 email 當名稱建立。
+        let prefix = email.split(separator: "@").first.map(String.init) ?? email
+        let user = directory.first { $0.name.localizedCaseInsensitiveContains(prefix) }
+            ?? User(id: "usr_\(abs(email.hashValue))", name: email, avatarColor: "#888888")
+
         var members = membersByChannel[channelID] ?? []
-        if !members.contains(where: { $0.id == userID }) {
+        if !members.contains(where: { $0.id == user.id }) {
             members.append(user)
             membersByChannel[channelID] = members
             if let idx = channels.firstIndex(where: { $0.id == channelID }) {
@@ -144,12 +163,6 @@ final class MockBackendService: BackendService {
             }
         }
         return members
-    }
-
-    func searchUsers(keyword: String) async throws -> [User] {
-        try await fakeDelay(0.2)
-        guard !keyword.isEmpty else { return directory }
-        return directory.filter { $0.name.localizedCaseInsensitiveContains(keyword) }
     }
 
     // MARK: 語意查詢(RAG 模擬)

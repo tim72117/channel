@@ -53,7 +53,7 @@ npm run dev      # → http://localhost:5173
 src/
 ├── types.ts       # 與後端對齊的 TS 型別
 ├── api.ts         # API client(攔截每次交易,計時、擷取原始 JSON)
-├── App.tsx        # iPhone 殼 + 各頁面(頻道/聊天/成員/查詢/設定)
+├── App.tsx        # iPhone 殼 + 各頁面(頻道/聊天/成員/設定);聊天頁中 owner 發訊息、成員以自然語言查詢
 ├── DebugPanel.tsx # 右側 debug panel
 └── styles.css     # iOS 風格樣式
 ```

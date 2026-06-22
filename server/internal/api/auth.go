@@ -64,15 +64,7 @@ func (s *Server) handleAppleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := s.signer.Sign(user.ID, user.Name)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "sign_failed", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"token": token,
-		"user":  user,
-	})
+	s.issueToken(w, user, identity.Email)
 }
 
 // POST /v1/auth/register
@@ -115,7 +107,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "create_failed", err.Error())
 		return
 	}
-	s.issueToken(w, user)
+	s.issueToken(w, user, email)
 }
 
 // POST /v1/auth/login
@@ -136,17 +128,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "invalid_credentials", "email 或密碼錯誤")
 		return
 	}
-	s.issueToken(w, user)
+	s.issueToken(w, user, email)
 }
 
-// issueToken 簽發 JWT 並以 { token, user } 回應(register/login 共用)。
-func (s *Server) issueToken(w http.ResponseWriter, user model.User) {
+// issueToken 簽發 JWT 並以 { token, user, profile } 回應(register/login/apple 共用)。
+// user 為公開身分;profile 含私密資料(email),分離設計。
+func (s *Server) issueToken(w http.ResponseWriter, user model.User, email string) {
 	token, err := s.signer.Sign(user.ID, user.Name)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "sign_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": user})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token":   token,
+		"user":    user,
+		"profile": model.Profile{Email: email},
+	})
 }
 
 // GET /v1/me — 用 Bearer token 取得目前登入使用者(驗證 token 是否仍有效)。
@@ -166,5 +163,9 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		// token 有效但使用者已不存在
 		user = model.User{ID: claims.Sub, Name: claims.Name, AvatarColor: "#4A90D9"}
 	}
-	writeJSON(w, http.StatusOK, user)
+	email, _ := s.store.GetUserEmail(claims.Sub)
+	writeJSON(w, http.StatusOK, model.Me{
+		User:    user,
+		Profile: model.Profile{Email: email},
+	})
 }

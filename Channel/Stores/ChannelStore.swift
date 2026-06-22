@@ -86,10 +86,51 @@ final class ChatStore {
                 messages[idx] = saved
             }
         } catch {
-            // 失敗:標記該樂觀訊息
+            // 失敗:標記該樂觀訊息,並帶上真正的失敗原因方便排查。
             if let idx = messages.firstIndex(where: { $0.id == tempID }) {
                 messages[idx].isProcessing = false
-                messages[idx].text += " ⚠️(傳送失敗)"
+                messages[idx].text += "\n⚠️ 傳送失敗:\(error.localizedDescription)"
+            }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// 助手回答用的固定作者 ID(本地顯示,不存後端)。
+    static let assistantID = "usr_assistant"
+
+    /// 成員用:把問題以自然語言查詢頻道,回答顯示在訊息流(本地,不寫入頻道)。
+    func ask(_ question: String) async {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // 我的提問氣泡。
+        messages.append(Message(
+            id: "ask_\(UUID().uuidString.prefix(6))",
+            channelID: channel.id,
+            authorID: backend.currentUser.id,
+            authorName: backend.currentUser.name,
+            text: trimmed))
+
+        // 助手「思考中」氣泡。
+        let pendingID = "ans_\(UUID().uuidString.prefix(6))"
+        messages.append(Message(
+            id: pendingID,
+            channelID: channel.id,
+            authorID: ChatStore.assistantID,
+            authorName: "助手",
+            text: "",
+            isProcessing: true))
+
+        do {
+            let answer = try await backend.semanticQuery(channelID: channel.id, question: trimmed)
+            if let idx = messages.firstIndex(where: { $0.id == pendingID }) {
+                messages[idx].text = answer.answer
+                messages[idx].isProcessing = false
+            }
+        } catch {
+            if let idx = messages.firstIndex(where: { $0.id == pendingID }) {
+                messages[idx].text = "查詢失敗:\(error.localizedDescription)"
+                messages[idx].isProcessing = false
             }
             errorMessage = error.localizedDescription
         }

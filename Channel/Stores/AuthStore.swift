@@ -10,10 +10,17 @@ final class AuthStore {
 
     /// 目前登入的使用者;nil 表示訪客(未登入)。
     var user: User?
+    /// 目前登入者的 email(私密資料 profile);訪客為 nil。
+    var email: String?
     var isSigningIn = false
     var errorMessage: String?
 
     var isSignedIn: Bool { user != nil }
+
+    /// 從 backend 同步登入者的 email(僅 HTTP backend 有 profile)。
+    private func syncEmail() {
+        email = (backend as? HTTPBackendService)?.currentEmail
+    }
 
     init(backend: BackendService) {
         self.backend = backend
@@ -27,6 +34,7 @@ final class AuthStore {
         if let http = backend as? HTTPBackendService {
             do {
                 user = try await http.refreshCurrentUser()
+                syncEmail()
             } catch {
                 signOut()
             }
@@ -59,17 +67,44 @@ final class AuthStore {
             let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
                 .compactMap { $0 }.joined(separator: " ")
             do {
-                let signedIn = try await backend.signInWithApple(
+                user = try await backend.signInWithApple(
                     identityToken: identityToken,
                     fullName: fullName.isEmpty ? nil : fullName)
-                user = signedIn
-                // HTTP backend 已在內部保存 token;從中取出存進 Keychain。
-                if let http = backend as? HTTPBackendService, let t = http.currentToken {
-                    TokenStore.save(t)
-                }
+                persistToken()
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    /// 以 email/密碼註冊新帳號。
+    func register(email: String, password: String, name: String?) async {
+        await runAuth { try await self.backend.register(email: email, password: password, name: name) }
+    }
+
+    /// 以 email/密碼登入。
+    func signIn(email: String, password: String) async {
+        await runAuth { try await self.backend.signIn(email: email, password: password) }
+    }
+
+    /// 共用的 email 認證流程:設定載入狀態、執行、保存 token。
+    private func runAuth(_ action: () async throws -> User) async {
+        isSigningIn = true
+        errorMessage = nil
+        defer { isSigningIn = false }
+        do {
+            user = try await action()
+            persistToken()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// HTTP backend 登入成功後已在內部保存 token;取出存進 Keychain,並同步 email。
+    private func persistToken() {
+        syncEmail()
+        if let http = backend as? HTTPBackendService, let t = http.currentToken {
+            TokenStore.save(t)
         }
     }
 
@@ -77,5 +112,6 @@ final class AuthStore {
         TokenStore.delete()
         backend.setAuthToken(nil)
         user = nil
+        email = nil
     }
 }

@@ -15,8 +15,8 @@ protocol BackendService {
 
     // 成員
     func fetchMembers(channelID: String) async throws -> [User]
-    func addMember(channelID: String, userID: String) async throws -> [User]
-    func searchUsers(keyword: String) async throws -> [User]
+    /// 以 email 邀請使用者加入頻道。
+    func addMember(channelID: String, email: String) async throws -> [User]
 
     // 語意查詢(RAG)
     func semanticQuery(channelID: String, question: String) async throws -> SearchAnswer
@@ -24,6 +24,10 @@ protocol BackendService {
     // 認證
     /// 用 Apple identity token 登入,成功後回傳使用者並在內部保存 session token。
     func signInWithApple(identityToken: String, fullName: String?) async throws -> User
+    /// 以 email/密碼註冊新帳號,成功後回傳使用者並在內部保存 session token。
+    func register(email: String, password: String, name: String?) async throws -> User
+    /// 以 email/密碼登入,成功後回傳使用者並在內部保存 session token。
+    func signIn(email: String, password: String) async throws -> User
     /// 設定既有的 session token(App 啟動時從 Keychain 還原)。
     func setAuthToken(_ token: String?)
 

@@ -5,17 +5,10 @@ package wanttools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"time"
 
 	"want/types"
 )
-
-// 條目寫入的檔名(位於 agent 工作目錄下)。
-const entriesFileName = "entries.jsonl"
 
 func init() {
 	types.RegisterTool(RecordEntryDeclaration, func() types.ToolInterface {
@@ -24,13 +17,13 @@ func init() {
 }
 
 // RecordEntryDeclaration 是給 LLM 看的工具宣告。
-// datetime 由 LLM 從使用者訊息「解析」出來(事件發生的時間);
+// 事件時間由 LLM 從訊息解析,支援單一時間點、時間範圍與全日事件;
 // 系統另記錄 recorded_at(寫入當下時間)作為審計用。
 var RecordEntryDeclaration = types.ToolDeclaration{
 	Name: "record_entry",
 	Description: "將一則項目記錄成帶有日期時間的條目,寫入記事檔。" +
 		"當使用者想把訊息存成待辦、行程、備忘或日誌條目時使用。每呼叫一次新增一筆。" +
-		"請從使用者訊息中解析出事件的時間並填入 datetime。",
+		"請從訊息解析出事件的時間,可以是單一時間點、時間範圍或全日事件。",
 	Type: "sync",
 	Parameters: map[string]interface{}{
 		"type": "OBJECT",
@@ -39,11 +32,22 @@ var RecordEntryDeclaration = types.ToolDeclaration{
 				"type":        "STRING",
 				"description": "要記錄的事項內容(去掉時間後的描述),例如:'開會討論 Q3 預算'",
 			},
-			"datetime": map[string]interface{}{
+			"start": map[string]interface{}{
 				"type": "STRING",
-				"description": "從訊息解析出的事件日期時間,格式 'YYYY-MM-DD HH:MM'。" +
+				"description": "事件開始時間。有明確時刻時用 'YYYY-MM-DD HH:MM';" +
+					"全日事件(allDay=true)時用 'YYYY-MM-DD'(不含時刻)。" +
 					"相對時間(如「明天」「週五早上十點」)請依提供的今天日期換算成絕對日期。" +
-					"若只有日期沒有時刻,時間補 00:00。若訊息完全沒提到時間,留空字串。",
+					"訊息完全沒提到時間就留空字串。",
+			},
+			"end": map[string]interface{}{
+				"type": "STRING",
+				"description": "事件結束時間,格式同 start。" +
+					"只有當訊息表達時間範圍(如「三點到五點」「6/30 到 7/2」)時才填,否則留空字串。",
+			},
+			"allDay": map[string]interface{}{
+				"type": "BOOLEAN",
+				"description": "是否為全日事件(只有日期、沒有特定時刻,如「6月30號休假」)。" +
+					"有明確時刻時為 false。",
 			},
 		},
 		"required": []string{"item"},
@@ -73,65 +77,47 @@ func (t *RecordEntryTool) RenderToolResult(data map[string]interface{}) string {
 	return "已記錄條目"
 }
 
-// entry 是寫入記事檔的一筆條目。
-type entry struct {
-	// Datetime 是 LLM 從訊息解析出的事件時間(YYYY-MM-DD HH:MM);訊息未提及時間則為空。
-	Datetime string `json:"datetime"`
-	// Item 是事項描述(去掉時間後)。
-	Item string `json:"item"`
-	// RecordedAt 是寫入當下的系統時間,審計用。
-	RecordedAt string `json:"recorded_at"`
-}
-
-func (t *RecordEntryTool) Execute(_ context.Context, args types.ToolArguments, ctx types.ToolContext) (types.ToolCallResult, error) {
+func (t *RecordEntryTool) Execute(_ context.Context, args types.ToolArguments, _ types.ToolContext) (types.ToolCallResult, error) {
 	item := args.GetString("item")
 	if item == "" {
 		return types.ToolCallResult{}, fmt.Errorf("item 不可為空")
 	}
 
-	// datetime 由 LLM 從使用者訊息解析(可能為空,表示訊息未提及時間)。
-	eventTime := args.GetString("datetime")
+	// 事件時間由 LLM 從訊息解析。
+	start := args.GetString("start")
+	end := args.GetString("end")
+	allDay := args.GetBool("allDay")
 
-	e := entry{
-		Datetime:   eventTime,
-		Item:       item,
-		RecordedAt: time.Now().Format("2006-01-02 15:04:05"),
-	}
-
-	// 條目寫到 agent 工作目錄下的記事檔。
-	dir := ctx.GetWorkingDirectory()
-	if dir == "" {
-		dir, _ = os.Getwd()
-	}
-	path := filepath.Join(dir, entriesFileName)
-
-	// 一行一筆 JSON(用 encoder 確保特殊字元安全跳脫)。
-	jsonBytes, err := json.Marshal(e)
-	if err != nil {
-		return types.ToolCallResult{}, fmt.Errorf("序列化條目失敗: %w", err)
+	// 交給 sink 持久化(帶上當前記錄 context 的 messageID / channelID)。
+	if err := emit(RecordedEntry{Item: item, Start: start, End: end, AllDay: allDay}); err != nil {
+		return types.ToolCallResult{}, fmt.Errorf("寫入條目失敗: %w", err)
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return types.ToolCallResult{}, fmt.Errorf("開啟記事檔失敗: %w", err)
-	}
-	defer f.Close()
-	if _, err := f.Write(append(jsonBytes, '\n')); err != nil {
-		return types.ToolCallResult{}, fmt.Errorf("寫入記事檔失敗: %w", err)
-	}
-
-	when := eventTime
-	if when == "" {
-		when = "(未指定時間)"
-	}
-	resultMsg := fmt.Sprintf("已記錄:%s %s", when, item)
+	resultMsg := fmt.Sprintf("已記錄:%s %s", describeTime(start, end, allDay), item)
 	return types.ToolCallResult{
 		Content: []types.ResultContentBlock{types.TextBlock(resultMsg)},
 		ToolUseResult: map[string]interface{}{
-			"message":  resultMsg,
-			"datetime": eventTime,
-			"item":     item,
-			"file":     path,
+			"message": resultMsg,
+			"start":   start,
+			"end":     end,
+			"allDay":  allDay,
+			"item":    item,
 		},
 	}, nil
+}
+
+// describeTime 把時間描述成人類可讀字串。
+func describeTime(start, end string, allDay bool) string {
+	switch {
+	case start == "":
+		return "(未指定時間)"
+	case allDay && end != "":
+		return start + " ~ " + end + "(全日)"
+	case allDay:
+		return start + "(全日)"
+	case end != "":
+		return start + " ~ " + end
+	default:
+		return start
+	}
 }

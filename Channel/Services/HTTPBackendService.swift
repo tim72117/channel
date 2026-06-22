@@ -17,6 +17,9 @@ final class HTTPBackendService: BackendService {
     /// session token(登入後保存,帶在每個請求的 Authorization header)。
     private var authToken: String?
 
+    /// 目前登入者的 email(私密資料 profile),訪客為 nil。
+    private(set) var currentEmail: String?
+
     /// 供 AuthStore 取出 token 存入 Keychain。
     var currentToken: String? { authToken }
 
@@ -54,22 +57,11 @@ final class HTTPBackendService: BackendService {
         return res.members
     }
 
-    func addMember(channelID: String, userID: String) async throws -> [User] {
-        // 後端需要完整使用者資料;從使用者目錄查出 name/avatarColor。
-        let user = try await searchUsers(keyword: "").first { $0.id == userID }
-        let body: [String: String] = [
-            "userID": userID,
-            "name": user?.name ?? userID,
-            "avatarColor": user?.avatarColor ?? "#888888",
-        ]
-        let res: MembersResponse = try await post("channels/\(channelID)/members", body: body)
+    func addMember(channelID: String, email: String) async throws -> [User] {
+        // 後端以 email 查出使用者後加入。
+        let res: MembersResponse = try await post("channels/\(channelID)/members",
+                                                  body: ["email": email])
         return res.members
-    }
-
-    func searchUsers(keyword: String) async throws -> [User] {
-        let q = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let res: UsersResponse = try await get("users/search?q=\(q)")
-        return res.users
     }
 
     // MARK: 語意查詢
@@ -95,18 +87,47 @@ final class HTTPBackendService: BackendService {
             body: Body(identityToken: identityToken, fullName: fullName))
         authToken = res.token
         currentUser = res.user
+        currentEmail = res.profile.email
+        return res.user
+    }
+
+    func register(email: String, password: String, name: String?) async throws -> User {
+        struct Body: Encodable { let email: String; let password: String; let name: String? }
+        let res: AuthResponse = try await post(
+            "auth/register",
+            body: Body(email: email, password: password, name: name))
+        authToken = res.token
+        currentUser = res.user
+        currentEmail = res.profile.email
+        return res.user
+    }
+
+    func signIn(email: String, password: String) async throws -> User {
+        struct Body: Encodable { let email: String; let password: String }
+        let res: AuthResponse = try await post(
+            "auth/login",
+            body: Body(email: email, password: password))
+        authToken = res.token
+        currentUser = res.user
+        currentEmail = res.profile.email
         return res.user
     }
 
     func setAuthToken(_ token: String?) {
         authToken = token
+        if token == nil {
+            currentUser = HTTPBackendService.guest
+            currentEmail = nil
+        }
     }
 
     /// 已知 token 時向後端確認身分;失敗(token 失效)會丟錯,呼叫端據以登出。
+    /// /me 回 { user, profile },解析後同步 currentUser 與 currentEmail。
     func refreshCurrentUser() async throws -> User {
-        let user: User = try await get("me")
-        currentUser = user
-        return user
+        let me: MeResponse = try await get("me")
+        currentUser = me.user
+        currentEmail = me.profile.email
+        return me.user
     }
 
     // MARK: - 傳輸
@@ -167,8 +188,9 @@ final class HTTPBackendService: BackendService {
 private struct ChannelsResponse: Decodable { let channels: [Channel] }
 private struct MessagesResponse: Decodable { let messages: [Message] }
 private struct MembersResponse: Decodable { let members: [User] }
-private struct UsersResponse: Decodable { let users: [User] }
-private struct AuthResponse: Decodable { let token: String; let user: User }
+private struct Profile: Decodable { let email: String }
+private struct AuthResponse: Decodable { let token: String; let user: User; let profile: Profile }
+private struct MeResponse: Decodable { let user: User; let profile: Profile }
 private struct QueryResponse: Decodable {
     let answer: String
     let citedMessageIDs: [String]

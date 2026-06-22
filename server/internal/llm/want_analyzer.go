@@ -9,9 +9,8 @@ import (
 	"time"
 
 	"github.com/channel/server/internal/model"
-
-	// blank import:觸發自訂 want 工具的 init() 註冊(record_entry 等)。
-	_ "github.com/channel/server/internal/wanttools"
+	// 自訂 want 工具(record_entry):init() 註冊工具,並提供記錄 context/sink。
+	"github.com/channel/server/internal/wanttools"
 
 	wantorch "want/orchestrator"
 	wanttypes "want/types"
@@ -104,11 +103,18 @@ func (w *WantAnalyzer) generate(prompt string) (string, error) {
 	}
 }
 
-// RecordIfRelevant 讓 agent 處理一則訊息,自主決定是否用 record_entry 記成條目。
+// RecordForMessage 讓 agent 處理一則訊息,自主決定是否用 record_entry 記成條目。
+// 解析出的條目會關聯到此 messageID / channelID。
 // 跑完整 agent 流程(允許工具呼叫),以 idle 為完成訊號。非阻塞收訊息主流程時應放 goroutine。
-func (w *WantAnalyzer) RecordIfRelevant(text string) {
+func (w *WantAnalyzer) RecordForMessage(channelID, messageID, text string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	// 全域序列化記錄流程,並設定本次條目要關聯的訊息(工具透過 context 取得)。
+	wanttools.RecordLock()
+	defer wanttools.RecordUnlock()
+	wanttools.SetContext(messageID, channelID)
+	defer wanttools.ClearContext()
 
 	state := wantui.NewCommonInferenceState()
 	done := make(chan struct{})
@@ -179,7 +185,11 @@ func buildRecordPrompt(text string) string {
 以下是使用者在頻道發送的訊息。
 如果訊息包含值得記錄的待辦、行程、會議、提醒或具體事項,請呼叫 record_entry 工具把它記錄成條目:
 - item:簡潔的事項描述(去掉時間部分)。
-- datetime:從訊息中解析出的事件時間,格式 'YYYY-MM-DD HH:MM'。相對時間(如「明天」「週五早上十點」)請依今天日期換算成絕對日期。訊息沒提到時間就留空字串。
+- 事件時間請依下列三種情況填寫,相對時間(如「明天」「週五」)依今天日期換算成絕對日期:
+  1. 單一時間點(如「下午三點開會」):start='YYYY-MM-DD HH:MM',allDay=false,end 留空。
+  2. 時間範圍(如「三點到五點開會」「6/30 到 7/2 出差」):start 與 end 都填,有時刻用 'YYYY-MM-DD HH:MM',只有日期用 'YYYY-MM-DD'。
+  3. 全日事件(只有日期、沒有時刻,如「6月30號休假」):start='YYYY-MM-DD',allDay=true。
+  訊息完全沒提到時間:start 留空字串。
 
 如果只是閒聊、問句或沒有可記錄的具體事項,就不要呼叫工具,直接簡短回覆即可。
 

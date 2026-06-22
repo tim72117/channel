@@ -1,87 +1,46 @@
-// Package store 封裝 SQLite 持久層。原型階段用 SQLite,之後可換成 Postgres + pgvector。
+// Package store 封裝持久層(GORM + SQLite)。原型階段用 SQLite,
+// 之後可換成 Postgres + pgvector(GORM 換 driver 即可,store 介面不變)。
 package store
 
 import (
-	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
-	_ "modernc.org/sqlite" // 純 Go SQLite driver,免 CGO
+	"github.com/glebarez/sqlite" // 純 Go SQLite driver,免 CGO
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
+// ErrNotFound 是 store 層統一的「查無資料」錯誤。
+var ErrNotFound = errors.New("not found")
+
 type Store struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-// Open 開啟(或建立)SQLite 資料庫並套用 schema。
+// Open 開啟(或建立)資料庫並用 AutoMigrate 套用 schema。
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;`); err != nil {
-		return nil, fmt.Errorf("set pragmas: %w", err)
+
+	// many2many 的 members 中介表由 GORM 從關聯自動建立。
+	if err := db.AutoMigrate(&userRow{}, &channelRow{}, &messageRow{}, &entryRow{}); err != nil {
+		return nil, fmt.Errorf("automigrate: %w", err)
 	}
-	s := &Store{db: db}
-	if err := s.migrate(); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return &Store{db: db}, nil
 }
 
-func (s *Store) Close() error { return s.db.Close() }
-
-func (s *Store) migrate() error {
-	const schema = `
-CREATE TABLE IF NOT EXISTS channels (
-	id           TEXT PRIMARY KEY,
-	name         TEXT NOT NULL,
-	owner_id     TEXT NOT NULL DEFAULT '',   -- 建立者(擁有者)的使用者 ID
-	created_at   DATETIME NOT NULL,
-	updated_at   DATETIME NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-	id           TEXT PRIMARY KEY,
-	channel_id   TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-	author_id    TEXT NOT NULL,
-	author_name  TEXT NOT NULL,
-	text         TEXT NOT NULL,
-	category     TEXT,
-	tags         TEXT,            -- JSON 陣列字串
-	summary      TEXT,
-	created_at   DATETIME NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, created_at);
-
-CREATE TABLE IF NOT EXISTS members (
-	channel_id   TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-	user_id      TEXT NOT NULL,
-	user_name    TEXT NOT NULL,
-	avatar_color TEXT NOT NULL,
-	PRIMARY KEY (channel_id, user_id)
-);
-
--- 可被搜尋並邀請的使用者目錄,同時是登入帳號。
-CREATE TABLE IF NOT EXISTS users (
-	id            TEXT PRIMARY KEY,
-	name          TEXT NOT NULL,
-	avatar_color  TEXT NOT NULL,
-	apple_sub     TEXT UNIQUE,        -- Apple 登入的穩定 ID,可為 NULL(seed 的示範使用者)
-	email         TEXT UNIQUE,        -- 帳密登入的 email,可為 NULL(Apple 使用者)
-	password_hash TEXT                -- PBKDF2 密碼雜湊,可為 NULL(Apple 使用者)
-);
-`
-	_, err := s.db.Exec(schema)
+func (s *Store) Close() error {
+	sqlDB, err := s.db.DB()
 	if err != nil {
-		return fmt.Errorf("migrate: %w", err)
+		return err
 	}
-	// 對舊資料庫補欄位(欄位已存在時 SQLite 會報錯,忽略之)。
-	_, _ = s.db.Exec(`ALTER TABLE users ADD COLUMN apple_sub TEXT`)
-	_, _ = s.db.Exec(`ALTER TABLE users ADD COLUMN email TEXT`)
-	_, _ = s.db.Exec(`ALTER TABLE users ADD COLUMN password_hash TEXT`)
-	_, _ = s.db.Exec(`ALTER TABLE channels ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''`)
-	return nil
+	return sqlDB.Close()
 }
 
 // now 統一回傳 UTC 時間。

@@ -51,7 +51,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/channels/{id}/members", s.handleListMembers)
 	mux.HandleFunc("POST /v1/channels/{id}/members", s.handleAddMember)
 	mux.HandleFunc("POST /v1/channels/{id}/query", s.handleQuery)
-	mux.HandleFunc("GET /v1/users/search", s.handleSearchUsers)
+	mux.HandleFunc("GET /v1/channels/{id}/entries", s.handleListEntries)
 	return logging(cors(mux))
 }
 
@@ -168,7 +168,7 @@ func (s *Server) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 	// 以發訊息使用者的 ID 作為 session key(per-session 鋪路;現階段仍共用實例)。
 	// 放 goroutine 不阻塞回應。
 	if rec, ok := s.analyzer.(llm.Recorder); ok {
-		go rec.RecordForSession(user.ID, text)
+		go rec.RecordForSession(user.ID, id, msg.ID, text)
 	}
 
 	writeJSON(w, http.StatusCreated, msg)
@@ -189,25 +189,32 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /v1/channels/{id}/members  { "userID", "name", "avatarColor" }
+// POST /v1/channels/{id}/members  { "email": "..." }
+// 以 email 查出使用者後加入頻道。
 func (s *Server) handleAddMember(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var u model.User
 	var body struct {
-		UserID      string `json:"userID"`
-		Name        string `json:"name"`
-		AvatarColor string `json:"avatarColor"`
+		Email string `json:"email"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	u = model.User{ID: body.UserID, Name: body.Name, AvatarColor: body.AvatarColor}
-	if u.ID == "" {
-		writeErr(w, http.StatusBadRequest, "invalid_user", "userID 不可為空")
+	email := strings.TrimSpace(strings.ToLower(body.Email))
+	if email == "" {
+		writeErr(w, http.StatusBadRequest, "invalid_email", "email 不可為空")
 		return
 	}
-	if u.AvatarColor == "" {
-		u.AvatarColor = "#888888"
+
+	u, _, err := s.store.FindUserByEmail(email)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "user_not_found", "找不到使用此 email 的使用者")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "lookup_failed", err.Error())
+		return
 	}
+
 	members, err := s.store.AddMember(id, u)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -243,19 +250,18 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, answer)
 }
 
-// GET /v1/users/search?q=<keyword>
-// 搜尋可邀請的使用者。
-func (s *Server) handleSearchUsers(w http.ResponseWriter, r *http.Request) {
-	keyword := strings.TrimSpace(r.URL.Query().Get("q"))
-	users, err := s.store.SearchUsers(keyword)
+// GET /v1/channels/{id}/entries — 頻道的日期/事件條目(LLM 從訊息解析,關聯訊息)。
+func (s *Server) handleListEntries(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	entries, err := s.store.ListEntriesByChannel(id)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "search_failed", err.Error())
+		writeErr(w, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
-	if users == nil {
-		users = []model.User{}
+	if entries == nil {
+		entries = []model.Entry{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
 }
 
 // ----- helpers -----

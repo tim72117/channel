@@ -1,15 +1,17 @@
 import SwiftUI
 
 /// 頻道聊天畫面:訊息流 + 底部輸入列。
-/// 工具列可進入「成員管理」與「語意查詢」。
+/// owner 輸入=發訊息(走 LLM 分類);成員輸入=語意查詢(走 RAG 回答,顯示在訊息流)。
 struct ChatView: View {
     let channel: Channel
     @Environment(AppState.self) private var app
     @State private var store: ChatStore?
     @State private var draft = ""
-    @State private var showingSearch = false
     @State private var showingMembers = false
     @FocusState private var inputFocused: Bool
+
+    /// 目前使用者是否為頻道擁有者。
+    private var isOwner: Bool { channel.ownerID == app.currentUser.id }
 
     var body: some View {
         Group {
@@ -24,14 +26,8 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button { showingSearch = true } label: { Label("語意查詢", systemImage: "sparkle.magnifyingglass") }
-                    Button { showingMembers = true } label: { Label("成員", systemImage: "person.2") }
-                } label: { Image(systemName: "ellipsis.circle") }
+                Button { showingMembers = true } label: { Image(systemName: "person.2") }
             }
-        }
-        .sheet(isPresented: $showingSearch) {
-            NavigationStack { SemanticSearchView(channel: channel) }
         }
         .sheet(isPresented: $showingMembers) {
             NavigationStack { MembersView(channel: channel) }
@@ -63,7 +59,8 @@ struct ChatView: View {
 
     private func inputBar(_ store: ChatStore) -> some View {
         HStack(spacing: 10) {
-            TextField("輸入訊息…", text: $draft, axis: .vertical)
+            TextField(isOwner ? "輸入訊息…" : "用自然語言查詢這個頻道…",
+                      text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(Color(.secondarySystemBackground), in: Capsule())
@@ -73,11 +70,18 @@ struct ChatView: View {
             Button {
                 let text = draft
                 draft = ""
-                Task { await store.send(text) }
+                Task {
+                    if isOwner {
+                        await store.send(text)
+                    } else {
+                        await store.ask(text)
+                    }
+                }
             } label: {
-                Image(systemName: "arrow.up.circle.fill")
+                Image(systemName: isOwner ? "arrow.up.circle.fill" : "sparkle.magnifyingglass")
                     .font(.title)
-                    .foregroundStyle(draft.trimmingCharacters(in: .whitespaces).isEmpty ? .gray : .accentColor)
+                    .foregroundStyle(draft.trimmingCharacters(in: .whitespaces).isEmpty
+                                     ? .gray : (isOwner ? .accentColor : .purple))
             }
             .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
         }

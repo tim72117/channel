@@ -5,6 +5,7 @@
 import type {
   AuthResponse,
   Channel,
+  Me,
   Message,
   SearchAnswer,
   User,
@@ -138,7 +139,7 @@ export function health(cfg: ClientConfig) {
 }
 
 export function me(cfg: ClientConfig) {
-  return request<User>(cfg, 'GET', '/v1/me')
+  return request<Me>(cfg, 'GET', '/v1/me')
 }
 
 export function signInWithApple(
@@ -206,21 +207,14 @@ export function fetchMembers(cfg: ClientConfig, channelID: string) {
   ).then((r) => r.members)
 }
 
-export function addMember(cfg: ClientConfig, channelID: string, user: User) {
+// 以 email 邀請使用者加入頻道(對齊 iOS App;後端依 email 查出使用者)。
+export function addMember(cfg: ClientConfig, channelID: string, email: string) {
   return request<{ members: User[] }>(
     cfg,
     'POST',
     `/v1/channels/${encodeURIComponent(channelID)}/members`,
-    { userID: user.id, name: user.name, avatarColor: user.avatarColor },
+    { email },
   ).then((r) => r.members)
-}
-
-export function searchUsers(cfg: ClientConfig, keyword: string) {
-  return request<{ users: User[] }>(
-    cfg,
-    'GET',
-    `/v1/users/search?q=${encodeURIComponent(keyword)}`,
-  ).then((r) => r.users)
 }
 
 export function semanticQuery(

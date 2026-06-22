@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { ApiCall, ClientConfig } from './api'
 import * as api from './api'
 import { ApiError, onApiCall } from './api'
-import type { Channel, Message, SearchAnswer, User } from './types'
+import type { Channel, Message, User } from './types'
 import { DebugPanel } from './DebugPanel'
 
 // baseURL 是連線設定,跨分頁共用 → localStorage。
@@ -11,8 +12,9 @@ const LS_BASE = 'channel.baseURL'
 // 讓不同分頁能登入不同使用者(也為 per-session 鋪路)。
 const SS_TOKEN = 'channel.token'
 const SS_USER = 'channel.user'
+const SS_EMAIL = 'channel.email'
 
-type Tab = 'channels' | 'members' | 'search' | 'settings'
+type Tab = 'channels' | 'settings'
 
 export function App() {
   // ---- 連線設定(可在設定頁改,存 localStorage,跨分頁共用) ----
@@ -29,20 +31,28 @@ export function App() {
     const raw = sessionStorage.getItem(SS_USER)
     return raw ? (JSON.parse(raw) as User) : null
   })
+  // email 是私密資料(profile),只有自己看得到。
+  const [email, setEmail] = useState<string>(
+    () => sessionStorage.getItem(SS_EMAIL) ?? '',
+  )
 
-  // 登入成功:存 token + user 到 sessionStorage。
-  const onAuthed = useCallback((tok: string, u: User) => {
+  // 登入成功:存 token + user + email(profile)到 sessionStorage。
+  const onAuthed = useCallback((tok: string, u: User, mail: string) => {
     sessionStorage.setItem(SS_TOKEN, tok)
     sessionStorage.setItem(SS_USER, JSON.stringify(u))
+    sessionStorage.setItem(SS_EMAIL, mail)
     setToken(tok)
     setUser(u)
+    setEmail(mail)
   }, [])
 
   const onLogout = useCallback(() => {
     sessionStorage.removeItem(SS_TOKEN)
     sessionStorage.removeItem(SS_USER)
+    sessionStorage.removeItem(SS_EMAIL)
     setToken(null)
     setUser(null)
+    setEmail('')
   }, [])
 
   const cfg: ClientConfig = { baseURL, token }
@@ -55,42 +65,41 @@ export function App() {
   const [tab, setTab] = useState<Tab>('channels')
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null)
 
-  // 未登入 → 顯示登入頁(連線設定 baseURL 仍可調,因登入需要連對後端)。
-  const loggedIn = token != null && user != null
+  // 對齊 iOS App:未登入也能用(訪客身分,後端視為 usr_me),設定頁才登入/登出。
+  // 訪客 user 僅供顯示;cfg.token 為 null,後端據此當訪客。
+  const effectiveUser = user ?? GUEST_USER
 
   return (
     <div className="workbench">
       <div className="phone">
         <div className="phone-screen">
           <div className="notch" />
-          <StatusBar user={user} />
-          {!loggedIn ? (
-            <LoginScreen
-              baseURL={baseURL}
-              setBaseURL={setBaseURL}
-              onAuthed={onAuthed}
-            />
-          ) : (
-            <PhoneContent
-              cfg={cfg}
-              tab={tab}
-              setTab={setTab}
-              activeChannel={activeChannel}
-              setActiveChannel={setActiveChannel}
-              baseURL={baseURL}
-              setBaseURL={setBaseURL}
-              token={token}
-              setToken={setToken}
-              user={user}
-              onLogout={onLogout}
-            />
-          )}
+          <StatusBar user={effectiveUser} />
+          <PhoneContent
+            cfg={cfg}
+            tab={tab}
+            setTab={setTab}
+            activeChannel={activeChannel}
+            setActiveChannel={setActiveChannel}
+            baseURL={baseURL}
+            setBaseURL={setBaseURL}
+            token={token}
+            setToken={setToken}
+            user={effectiveUser}
+            email={email}
+            isGuest={user == null}
+            onAuthed={onAuthed}
+            onLogout={onLogout}
+          />
         </div>
       </div>
       <DebugPanel calls={calls} onClear={() => setCalls([])} />
     </div>
   )
 }
+
+// 訪客身分(未登入),需與後端 guestUser 一致。
+const GUEST_USER: User = { id: 'usr_me', name: '訪客', avatarColor: '#8e8e93' }
 
 function StatusBar({ user }: { user: User | null }) {
   return (
@@ -112,6 +121,9 @@ interface ContentProps {
   token: string | null
   setToken: (t: string | null) => void
   user: User
+  email: string
+  isGuest: boolean
+  onAuthed: (token: string, user: User, email: string) => void
   onLogout: () => void
 }
 
@@ -150,10 +162,6 @@ function TabScreen(props: ContentProps) {
           onOpen={(c) => props.setActiveChannel(c)}
         />
       )
-    case 'members':
-      return <MembersScreen cfg={props.cfg} channel={props.activeChannel} />
-    case 'search':
-      return <SearchScreen cfg={props.cfg} channel={props.activeChannel} />
     case 'settings':
       return (
         <SettingsScreen
@@ -161,6 +169,9 @@ function TabScreen(props: ContentProps) {
           baseURL={props.baseURL}
           setBaseURL={props.setBaseURL}
           user={props.user}
+          email={props.email}
+          isGuest={props.isGuest}
+          onAuthed={props.onAuthed}
           onLogout={props.onLogout}
         />
       )
@@ -170,8 +181,6 @@ function TabScreen(props: ContentProps) {
 function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const tabs: { key: Tab; ico: string; label: string }[] = [
     { key: 'channels', ico: '💬', label: '頻道' },
-    { key: 'members', ico: '👥', label: '成員' },
-    { key: 'search', ico: '🔍', label: '查詢' },
     { key: 'settings', ico: '⚙️', label: '設定' },
   ]
   return (
@@ -210,6 +219,13 @@ function errMsg(e: unknown): string {
   if (e instanceof ApiError) return e.message
   if (e instanceof Error) return e.message
   return String(e)
+}
+
+// Enter 送出,但略過輸入法(注音/中日韓)組字中的 Enter——
+// 組字選字時的 Enter 是「確認選字」,不該觸發送出。
+function isSubmitEnter(e: ReactKeyboardEvent): boolean {
+  // isComposing:組字進行中。keyCode 229:IME 處理中的按鍵。
+  return e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229
 }
 
 // ---- 頻道列表頁 ----
@@ -282,7 +298,7 @@ function ChannelsScreen({
             placeholder="新頻道名稱…"
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') submitCreate()
+              if (isSubmitEnter(e)) submitCreate()
               if (e.key === 'Escape') {
                 setCreating(false)
                 setNewName('')
@@ -341,12 +357,14 @@ function ChatScreen({
   user: User
   onBack: () => void
 }) {
-  // 只有 owner 能發訊息;非 owner(普通成員)只能用查詢分頁。
+  // owner 輸入=發訊息;成員輸入=語意查詢(回答顯示在訊息流,對齊 iOS App)。
   const isOwner = channel.ownerID === user.id
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  // 成員管理在頻道內開啟(對齊 iOS App 的聊天頁右上角入口)。
+  const [showMembers, setShowMembers] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -384,6 +402,43 @@ function ChatScreen({
     }
   }
 
+  // 成員用:自然語言查詢頻道,問答顯示在訊息流(本地,不寫入頻道)。
+  const ask = async () => {
+    const q = draft.trim()
+    if (!q) return
+    setSending(true)
+    setErr(null)
+    setDraft('')
+    const now = new Date().toISOString()
+    const mkMsg = (id: string, authorID: string, authorName: string, text: string): Message => ({
+      id, channelID: channel.id, authorID, authorName, text,
+      category: null, tags: [], summary: null, createdAt: now,
+    })
+    setMessages((prev) => [...prev, mkMsg(`ask_${Date.now()}`, user.id, user.name, q)])
+    try {
+      const a = await api.semanticQuery(cfg, channel.id, q)
+      setMessages((prev) => [
+        ...prev,
+        mkMsg(`ans_${Date.now()}`, 'usr_assistant', '助手', a.answer),
+      ])
+    } catch (e) {
+      setErr(errMsg(e))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  // 頻道內的成員管理(對齊 iOS App:聊天頁 → 成員)。
+  if (showMembers) {
+    return (
+      <MembersScreen
+        cfg={cfg}
+        channel={channel}
+        onBack={() => setShowMembers(false)}
+      />
+    )
+  }
+
   return (
     <>
       <div className="navbar">
@@ -391,8 +446,8 @@ function ChatScreen({
           ‹ 頻道
         </button>
         <span className="title">{channel.name}</span>
-        <button className="btn" onClick={load}>
-          ↻
+        <button className="btn" onClick={() => setShowMembers(true)} title="成員">
+          👥
         </button>
       </div>
       <div className="screen-body" ref={bodyRef}>
@@ -405,24 +460,25 @@ function ChatScreen({
             <div className="empty">
               {isOwner
                 ? '尚無訊息,在下方輸入發送看看 LLM 怎麼標注。'
-                : '你是這個頻道的成員。成員看不到歷史訊息,也不能發送;\n請到「查詢」分頁用自然語言詢問頻道內容。'}
+                : '你是這個頻道的成員。在下方用自然語言查詢頻道內容,回答會顯示在這裡。'}
             </div>
           )}
         </div>
       </div>
-      {isOwner ? (
-        <div className="composer">
-          <input
-            value={draft}
-            placeholder="輸入訊息…"
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && send()}
-          />
-          <button onClick={send} disabled={sending || !draft.trim()}>
-            {sending ? '…' : '送出'}
-          </button>
-        </div>
-      ) : null}
+      <div className="composer">
+        <input
+          value={draft}
+          placeholder={isOwner ? '輸入訊息…' : '用自然語言查詢這個頻道…'}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => isSubmitEnter(e) && (isOwner ? send() : ask())}
+        />
+        <button
+          onClick={isOwner ? send : ask}
+          disabled={sending || !draft.trim()}
+        >
+          {sending ? '…' : isOwner ? '送出' : '查詢'}
+        </button>
+      </div>
     </>
   )
 }
@@ -458,17 +514,18 @@ function MessageBubble({ msg, meID }: { msg: Message; meID: string }) {
 function MembersScreen({
   cfg,
   channel,
+  onBack,
 }: {
   cfg: ClientConfig
-  channel: Channel | null
+  channel: Channel
+  onBack: () => void
 }) {
   const [members, setMembers] = useState<User[]>([])
-  const [results, setResults] = useState<User[]>([])
-  const [kw, setKw] = useState('')
+  const [email, setEmail] = useState('')
   const [err, setErr] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
 
   const load = useCallback(async () => {
-    if (!channel) return
     setErr(null)
     try {
       setMembers(await api.fetchMembers(cfg, channel.id))
@@ -476,48 +533,43 @@ function MembersScreen({
       setErr(errMsg(e))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg.baseURL, cfg.token, channel?.id])
+  }, [cfg.baseURL, cfg.token, channel.id])
 
   useEffect(() => {
     load()
   }, [load])
 
-  const search = async () => {
+  // 以 email 邀請(對齊 iOS App)。
+  const invite = async () => {
+    const e = email.trim().toLowerCase()
+    if (!e.includes('@')) return
+    setAdding(true)
     setErr(null)
     try {
-      setResults(await api.searchUsers(cfg, kw.trim()))
-    } catch (e) {
-      setErr(errMsg(e))
-    }
-  }
-
-  const add = async (u: User) => {
-    if (!channel) return
-    try {
-      setMembers(await api.addMember(cfg, channel.id, u))
-    } catch (e) {
-      setErr(errMsg(e))
+      setMembers(await api.addMember(cfg, channel.id, e))
+      setEmail('')
+    } catch (err) {
+      setErr(errMsg(err))
+    } finally {
+      setAdding(false)
     }
   }
 
   return (
     <>
       <div className="navbar">
-        <span className="btn" style={{ visibility: 'hidden' }}>
-          ←
-        </span>
+        <button className="btn" onClick={onBack}>
+          ‹ 返回
+        </button>
         <span className="title">成員</span>
-        <button className="btn" onClick={load} disabled={!channel}>
+        <button className="btn" onClick={load}>
           ↻
         </button>
       </div>
       <div className="screen-body">
-        {!channel ? (
-          <div className="empty">請先在「頻道」頁選一個頻道。</div>
-        ) : (
-          <>
-            <ErrorBanner msg={err} />
-            <div className="section-title">頻道成員 · {channel.name}</div>
+        <>
+          <ErrorBanner msg={err} />
+          <div className="section-title">頻道成員 · {channel.name}</div>
             <ul className="list">
               {members.map((u) => (
                 <li key={u.id} className="row">
@@ -529,103 +581,35 @@ function MembersScreen({
                 </li>
               ))}
             </ul>
-            <div className="section-title">搜尋並邀請</div>
+            <div className="section-title">以 Email 邀請</div>
             <div className="field">
               <input
-                value={kw}
-                placeholder="輸入關鍵字後按 Enter"
-                onChange={(e) => setKw(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search()}
+                value={email}
+                placeholder="輸入對方的 Email 後按 Enter"
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => isSubmitEnter(e) && invite()}
               />
             </div>
-            <ul className="list">
-              {results.map((u) => (
-                <li key={u.id} className="row" onClick={() => add(u)}>
-                  <Avatar user={u} />
-                  <div className="grow">
-                    <div className="name">{u.name}</div>
-                    <div className="sub">點擊加入頻道</div>
-                  </div>
-                  <span className="chev">＋</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
-    </>
-  )
-}
-
-// ---- 語意查詢頁 ----
-
-function SearchScreen({
-  cfg,
-  channel,
-}: {
-  cfg: ClientConfig
-  channel: Channel | null
-}) {
-  const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState<SearchAnswer | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  const ask = async () => {
-    if (!channel || !question.trim()) return
-    setLoading(true)
-    setErr(null)
-    setAnswer(null)
-    try {
-      setAnswer(await api.semanticQuery(cfg, channel.id, question.trim()))
-    } catch (e) {
-      setErr(errMsg(e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <>
-      <div className="navbar">
-        <span className="btn" style={{ visibility: 'hidden' }}>
-          ←
-        </span>
-        <span className="title">語意查詢</span>
-        <span className="btn" style={{ visibility: 'hidden' }}>
-          ←
-        </span>
-      </div>
-      <div className="screen-body">
-        {!channel ? (
-          <div className="empty">請先在「頻道」頁選一個頻道。</div>
-        ) : (
-          <>
-            <div className="section-title">對「{channel.name}」提問</div>
-            <div className="field">
-              <input
-                value={question}
-                placeholder="例:上週有討論到預算的決議嗎?"
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && ask()}
-              />
+            <div style={{ padding: '0 16px' }}>
+              <button
+                onClick={invite}
+                disabled={adding || !email.includes('@')}
+                style={{
+                  width: '100%',
+                  padding: 10,
+                  border: 'none',
+                  borderRadius: 10,
+                  background:
+                    adding || !email.includes('@') ? '#b3d4ff' : 'var(--ios-blue)',
+                  color: '#fff',
+                  fontSize: 15,
+                  cursor: 'pointer',
+                }}
+              >
+                {adding ? '邀請中…' : '邀請加入'}
+              </button>
             </div>
-            <ErrorBanner msg={err} />
-            {loading && <div className="empty">查詢中…</div>}
-            {answer && (
-              <div className="answer-card">
-                <div className="ans">{answer.answer}</div>
-                {answer.citedMessageIDs.length > 0 && (
-                  <div className="cites">
-                    引用:{answer.citedMessageIDs.join(', ')}
-                    {answer.confidence != null &&
-                      ` · 信心 ${(answer.confidence * 100).toFixed(0)}%`}
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
+        </>
       </div>
     </>
   )
@@ -638,12 +622,18 @@ function SettingsScreen({
   baseURL,
   setBaseURL,
   user,
+  email,
+  isGuest,
+  onAuthed,
   onLogout,
 }: {
   cfg: ClientConfig
   baseURL: string
   setBaseURL: (s: string) => void
   user: User
+  email: string
+  isGuest: boolean
+  onAuthed: (token: string, user: User, email: string) => void
   onLogout: () => void
 }) {
   const [health, setHealth] = useState<string>('未測試')
@@ -670,22 +660,38 @@ function SettingsScreen({
         </span>
       </div>
       <div className="screen-body">
-        <div className="section-title">目前登入</div>
-        <div className="row">
-          <Avatar user={user} />
-          <div className="grow">
-            <div className="name">{user.name}</div>
-            <div className="sub">{user.id}</div>
-          </div>
-        </div>
-        <div className="row" onClick={onLogout}>
-          <div className="grow">
-            <div className="name" style={{ color: 'var(--ios-red)' }}>
-              登出
+        {isGuest ? (
+          <>
+            <div className="section-title">目前身分</div>
+            <div className="row">
+              <Avatar user={user} />
+              <div className="grow">
+                <div className="name">訪客</div>
+                <div className="sub">登入後發送的訊息會以你的身分顯示</div>
+              </div>
             </div>
-          </div>
-          <span className="chev">›</span>
-        </div>
+            <LoginForm baseURL={baseURL} onAuthed={onAuthed} />
+          </>
+        ) : (
+          <>
+            <div className="section-title">目前登入</div>
+            <div className="row">
+              <Avatar user={user} />
+              <div className="grow">
+                <div className="name">{user.name}</div>
+                <div className="sub">{email || user.id}</div>
+              </div>
+            </div>
+            <div className="row" onClick={onLogout}>
+              <div className="grow">
+                <div className="name" style={{ color: 'var(--ios-red)' }}>
+                  登出
+                </div>
+              </div>
+              <span className="chev">›</span>
+            </div>
+          </>
+        )}
         <div className="section-title">後端連線</div>
         <div className="field">
           <label>Base URL</label>
@@ -713,16 +719,14 @@ function SettingsScreen({
   )
 }
 
-// ---- 登入頁(帳密登入 / 註冊) ----
+// ---- 登入表單(內嵌於設定頁,訪客可登入 / 註冊) ----
 
-function LoginScreen({
+function LoginForm({
   baseURL,
-  setBaseURL,
   onAuthed,
 }: {
   baseURL: string
-  setBaseURL: (s: string) => void
-  onAuthed: (token: string, user: User) => void
+  onAuthed: (token: string, user: User, email: string) => void
 }) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('alice@channel.dev')
@@ -741,7 +745,7 @@ function LoginScreen({
         mode === 'login'
           ? await api.login(cfg, email.trim(), password)
           : await api.register(cfg, email.trim(), password, name.trim())
-      onAuthed(res.token, res.user)
+      onAuthed(res.token, res.user, res.profile.email)
     } catch (e) {
       setErr(errMsg(e))
     } finally {
@@ -751,92 +755,76 @@ function LoginScreen({
 
   return (
     <>
-      <div className="navbar">
-        <span className="title">{mode === 'login' ? '登入' : '註冊'}</span>
+      <div className="section-title">{mode === 'login' ? '登入' : '註冊'}</div>
+      <div className="field">
+        <label>Email</label>
+        <input
+          value={email}
+          autoComplete="username"
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+        />
       </div>
-      <div className="screen-body">
-        <div className="section-title">Channel 帳號</div>
+      <div className="field">
+        <label>密碼</label>
+        <input
+          type="password"
+          value={password}
+          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => isSubmitEnter(e) && submit()}
+          placeholder="至少 6 字元"
+        />
+      </div>
+      {mode === 'register' && (
         <div className="field">
-          <label>Email</label>
+          <label>顯示名稱(可選)</label>
           <input
-            value={email}
-            autoComplete="username"
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="留空則用 email"
           />
         </div>
-        <div className="field">
-          <label>密碼</label>
-          <input
-            type="password"
-            value={password}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-            placeholder="至少 6 字元"
-          />
-        </div>
-        {mode === 'register' && (
-          <div className="field">
-            <label>顯示名稱(可選)</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="留空則用 email"
-            />
-          </div>
-        )}
-        <ErrorBanner msg={err} />
-        <div style={{ padding: 16 }}>
-          <button
-            onClick={submit}
-            disabled={busy || !email.trim() || !password}
-            style={{
-              width: '100%',
-              padding: 12,
-              border: 'none',
-              borderRadius: 12,
-              background: busy ? '#b3d4ff' : 'var(--ios-blue)',
-              color: '#fff',
-              fontSize: 16,
-              cursor: 'pointer',
+      )}
+      <ErrorBanner msg={err} />
+      <div style={{ padding: 16 }}>
+        <button
+          onClick={submit}
+          disabled={busy || !email.trim() || !password}
+          style={{
+            width: '100%',
+            padding: 12,
+            border: 'none',
+            borderRadius: 12,
+            background: busy ? '#b3d4ff' : 'var(--ios-blue)',
+            color: '#fff',
+            fontSize: 16,
+            cursor: 'pointer',
+          }}
+        >
+          {busy ? '處理中…' : mode === 'login' ? '登入' : '註冊並登入'}
+        </button>
+        <div style={{ textAlign: 'center', marginTop: 14, fontSize: 14 }}>
+          <span style={{ color: 'var(--ios-gray)' }}>
+            {mode === 'login' ? '還沒有帳號?' : '已有帳號?'}
+          </span>{' '}
+          <span
+            style={{ color: 'var(--ios-blue)', cursor: 'pointer' }}
+            onClick={() => {
+              setMode(mode === 'login' ? 'register' : 'login')
+              setErr(null)
             }}
           >
-            {busy ? '處理中…' : mode === 'login' ? '登入' : '註冊並登入'}
-          </button>
-          <div
-            style={{ textAlign: 'center', marginTop: 14, fontSize: 14 }}
-          >
-            <span style={{ color: 'var(--ios-gray)' }}>
-              {mode === 'login' ? '還沒有帳號?' : '已有帳號?'}
-            </span>{' '}
-            <span
-              style={{ color: 'var(--ios-blue)', cursor: 'pointer' }}
-              onClick={() => {
-                setMode(mode === 'login' ? 'register' : 'login')
-                setErr(null)
-              }}
-            >
-              {mode === 'login' ? '註冊' : '登入'}
-            </span>
-          </div>
+            {mode === 'login' ? '註冊' : '登入'}
+          </span>
         </div>
-        <div className="section-title">後端連線</div>
-        <div className="field">
-          <label>Base URL</label>
-          <input
-            value={baseURL}
-            onChange={(e) => setBaseURL(e.target.value)}
-            placeholder="http://localhost:8080"
-          />
-        </div>
-        <div
-          className="field"
-          style={{ color: 'var(--ios-gray)', fontSize: 13 }}
-        >
-          開發測試:可用 seed 帳號 alice@channel.dev / password
-          (另有 bob、carol、dave)。或註冊新帳號。
-        </div>
+      </div>
+      <div
+        className="field"
+        style={{ color: 'var(--ios-gray)', fontSize: 13 }}
+      >
+        開發測試:可用 seed 帳號 alice@channel.dev / password
+        (另有 bob、carol、dave)。或註冊新帳號。
       </div>
     </>
   )
