@@ -51,6 +51,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/channels/{id}/query", s.handleQuery)
 	mux.HandleFunc("POST /v1/channels/{id}/assist", s.handleAssist)
 	mux.HandleFunc("GET /v1/channels/{id}/entries", s.handleListEntries)
+	mux.HandleFunc("GET /v1/channels/{id}/trips", s.handleListTrips)
+	mux.HandleFunc("GET /v1/channels/{id}/trips/{tripID}/entries", s.handleListTripEntries)
 	return logging(cors(mux))
 }
 
@@ -253,9 +255,44 @@ func (s *Server) requireEditor(w http.ResponseWriter, channelID, userID string) 
 	return true
 }
 
+// requireMember 檢查 userID 是否為頻道成員(owner 或任一角色皆可);
+// 非成員時寫入錯誤回應並回 false。用於「查詢」等任何成員都能做、但須屬於頻道的操作。
+// owner 恆視為成員(即使 members 表沒有對應列)。
+func (s *Server) requireMember(w http.ResponseWriter, channelID, userID string) bool {
+	owner, err := s.store.GetChannelOwner(channelID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "channel_not_found", "頻道不存在")
+			return false
+		}
+		writeErr(w, http.StatusInternalServerError, "owner_check_failed", err.Error())
+		return false
+	}
+	if userID == owner {
+		return true
+	}
+
+	// 非 owner:須在 members 表中(任一角色)才放行。
+	if _, err := s.store.GetMemberRole(channelID, userID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusForbidden, "not_member", "你不是此頻道的成員")
+			return false
+		}
+		writeErr(w, http.StatusInternalServerError, "role_check_failed", err.Error())
+		return false
+	}
+	return true
+}
+
 // POST /v1/channels/{id}/query  { "question": "..." }
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+
+	// 查詢會回傳頻道內的條目資料,須限頻道成員(owner 或任一角色),擋未登入訪客 / 非成員。
+	if !s.requireMember(w, id, s.userFor(r).ID) {
+		return
+	}
+
 	var body struct {
 		Question string `json:"question"`
 	}
@@ -345,6 +382,35 @@ func (s *Server) handleAssist(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListEntries(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	entries, err := s.store.ListEntriesByChannel(id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "list_failed", err.Error())
+		return
+	}
+	if entries == nil {
+		entries = []model.Entry{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+// GET /v1/channels/{id}/trips — 頻道的行程分組(後端依時間自動歸組)。
+func (s *Server) handleListTrips(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	trips, err := s.store.ListTripsByChannel(id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "list_failed", err.Error())
+		return
+	}
+	if trips == nil {
+		trips = []model.Trip{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"trips": trips})
+}
+
+// GET /v1/channels/{id}/trips/{tripID}/entries — 某行程下的條目。
+func (s *Server) handleListTripEntries(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	tripID := r.PathValue("tripID")
+	entries, err := s.store.ListEntriesByTrip(id, tripID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "list_failed", err.Error())
 		return

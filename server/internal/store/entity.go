@@ -43,6 +43,8 @@ type entryRow struct {
 	End       string `gorm:"column:end_at"` // end 是 SQL 保留字,欄位改名 end_at
 	AllDay    bool   `gorm:"column:all_day"`
 	Location  string `gorm:"column:location"` // 地點(可空)
+	// 所屬行程;NULL=未歸組。後端依時間自動歸組。
+	TripID *string `gorm:"column:trip_id;index"`
 	// LLM 標注(原本在 message 上,改存 entry)。
 	Category  *string   `gorm:"column:category"`
 	Tags      []string  `gorm:"column:tags;serializer:json"` // JSON 陣列存單一 TEXT 欄位
@@ -51,3 +53,15 @@ type entryRow struct {
 }
 
 func (entryRow) TableName() string { return "entries" }
+
+// tripRow 是 entries 的行程分組(對齊 entryRow 的字串時間慣例)。
+type tripRow struct {
+	ID        string    `gorm:"primaryKey;column:id"`
+	ChannelID string    `gorm:"column:channel_id;not null;index"`
+	Title     string    `gorm:"column:title"`
+	Start     string    `gorm:"column:start"`
+	End       string    `gorm:"column:end_at"` // end 是 SQL 保留字,對齊 entryRow 改名 end_at
+	CreatedAt time.Time `gorm:"column:created_at;not null"`
+}
+
+func (tripRow) TableName() string { return "trips" }

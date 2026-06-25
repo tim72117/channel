@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import type { ApiCall, ClientConfig, PresentedEntry } from './api'
 import * as api from './api'
 import { ApiError, onApiCall } from './api'
-import type { Channel, ChannelRole, Entry, Member, Message, User } from './types'
+import type { Channel, ChannelRole, Entry, Member, Message, Trip, User } from './types'
 import { DebugPanel } from './DebugPanel'
 import { listMessages, saveMessage } from './deviceDB'
 
@@ -377,6 +377,9 @@ function ChatScreen({
   const [messages, setMessages] = useState<ChatMessage[]>([])
   // Entry:LLM(record_entry 工具)從訊息解析出的條目,按 messageID 掛到對應訊息下方。
   const [entries, setEntries] = useState<Entry[]>([])
+  // Trip:後端依時間自動歸組的行程;頻道上方以按鈕列呈現,點入列出組內 entries。
+  const [trips, setTrips] = useState<Trip[]>([])
+  const [activeTrip, setActiveTrip] = useState<Trip | null>(null)
   const [draft, setDraft] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -388,16 +391,18 @@ function ChatScreen({
   const load = useCallback(async () => {
     setErr(null)
     try {
-      // 原話從「裝置端 DB」讀(與 server 隔離);entry 從後端讀(僅 owner)。
-      const [msgs, ents] = await Promise.all([
+      // 原話從「裝置端 DB」讀(與 server 隔離);entry/trip 從後端讀(僅 owner)。
+      const [msgs, ents, trps] = await Promise.all([
         listMessages(channel.id),
-        // Entry 條目只有 owner 看得到自己頻道的(成員聊天為空,無需載入)。
+        // Entry/Trip 只有 owner 看得到自己頻道的(成員聊天為空,無需載入)。
         isOwner ? api.fetchEntries(cfg, channel.id) : Promise.resolve([]),
+        isOwner ? api.fetchTrips(cfg, channel.id) : Promise.resolve([]),
       ])
       // owner 視角:記事原話已歸 entry(顯示在上方卡片),訊息流不顯示原話泡泡,
       // 只保留本地查詢問答泡泡;member 視角才把自己裝置的原話灌進訊息流。對齊 iOS。
       setMessages(isOwner ? [] : msgs)
       setEntries(ents)
+      setTrips(trps)
     } catch (e) {
       setErr(errMsg(e))
     }
@@ -546,6 +551,18 @@ function ChatScreen({
     )
   }
 
+  // 行程:點頻道上方的 Trip 按鈕 → 列出該行程的條目。
+  if (activeTrip) {
+    return (
+      <TripEntriesScreen
+        cfg={cfg}
+        channel={channel}
+        trip={activeTrip}
+        onBack={() => setActiveTrip(null)}
+      />
+    )
+  }
+
   return (
     <>
       <div className="navbar">
@@ -567,6 +584,25 @@ function ChatScreen({
           👥
         </button>
       </div>
+      {/* 行程按鈕列:後端歸組出的 Trip,點入列出組內條目 */}
+      {trips.length > 0 && (
+        <div className="trip-bar">
+          {trips.map((t) => {
+            const count = entries.filter((e) => e.tripID === t.id).length
+            return (
+              <button
+                key={t.id}
+                className="trip-chip"
+                onClick={() => setActiveTrip(t)}
+                title={`${t.start ?? ''}${t.end ? ` ~ ${t.end}` : ''}`}
+              >
+                🧳 {t.title}
+                {count > 0 && <span className="trip-count">{count}</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
       <div className="screen-body" ref={bodyRef}>
         <ErrorBanner msg={err} />
         {/* 以 entry 為主體:頻道的事件/條目列在最上方,點開可看關聯的來源訊息 */}
@@ -779,6 +815,76 @@ function TimelineScreen({
                 isFirst={i === 0}
                 isLast={i === groups.length - 1}
               />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+// TripEntriesScreen 列出某行程(Trip)底下的所有條目。
+// 自帶 navbar 與本地 entries state(獨立載入,避免回流閃動);複用 EntryCard。
+function TripEntriesScreen({
+  cfg,
+  channel,
+  trip,
+  onBack,
+}: {
+  cfg: ClientConfig
+  channel: Channel
+  trip: Trip
+  onBack: () => void
+}) {
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [err, setErr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let live = true
+    setLoading(true)
+    api
+      .fetchTripEntries(cfg, channel.id, trip.id)
+      .then((es) => {
+        if (live) setEntries(es)
+      })
+      .catch((e) => {
+        if (live) setErr(errMsg(e))
+      })
+      .finally(() => {
+        if (live) setLoading(false)
+      })
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg.baseURL, cfg.token, channel.id, trip.id])
+
+  const range =
+    trip.start ? `${trip.start}${trip.end ? ` ~ ${trip.end}` : ''}` : ''
+
+  return (
+    <>
+      <div className="navbar">
+        <button className="btn" onClick={onBack}>
+          ‹ 返回
+        </button>
+        <span className="title">🧳 {trip.title}</span>
+        <span className="btn" style={{ visibility: 'hidden' }}>
+          ‹
+        </span>
+      </div>
+      <div className="screen-body">
+        {range && <div className="entry-list-title">{range}</div>}
+        <ErrorBanner msg={err} />
+        {loading ? (
+          <div className="empty">載入中…</div>
+        ) : entries.length === 0 ? (
+          <div className="empty">這個行程還沒有條目。</div>
+        ) : (
+          <div className="entry-list">
+            {entries.map((e) => (
+              <EntryCard key={e.id} entry={e} />
             ))}
           </div>
         )}

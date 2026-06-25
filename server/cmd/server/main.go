@@ -31,6 +31,7 @@ func main() {
 	seed := flag.Bool("seed", true, "資料庫為空時寫入示範資料")
 	jwtSecret := flag.String("jwt-secret", "dev-secret-change-me", "JWT 簽章金鑰")
 	devMode := flag.Bool("dev", true, "開發模式:Apple token 不驗簽章")
+	llmKind := flag.String("llm", "want", "分析器:want(真實 LLM)| mock(假 LLM,送出觸發預設情境,供 web 操作)")
 	flag.Parse()
 
 	// Cloud Run 等托管環境只方便傳環境變數(不方便改 ENTRYPOINT 傳 flag),
@@ -70,32 +71,47 @@ func main() {
 		}
 	}
 
-	// 唯一的分析器:want LLM 引擎(WantPool,per-session orchestrator 外殼)。
-	// 現階段池內共用單一實例;未來 want 支援多實例後即可在池內 per-session 分流。
-	// 初始化失敗直接 fatal(無規則式後備)。
-	pool, err := llm.NewWantPool()
-	if err != nil {
-		log.Fatalf("初始化 want 分析器失敗: %v", err)
-	}
-	var analyzer llm.Analyzer = pool
-	// 注入條目持久化:record_entry 工具解析出的條目同步寫進 DB(entry 為主體,
-	// 獨立寫入),回傳新 entry ID。
-	wanttools.BindSink(func(channelID string, e wanttools.RecordedEntry) (string, error) {
-		id := "ent_" + randHex()
-		err := st.InsertEntry(model.Entry{
-			ID:        id,
-			ChannelID: channelID,
-			Item:      e.Item,
-			Start:     e.Start,
-			End:       e.End,
-			AllDay:    e.AllDay,
-			CreatedAt: nowUTC(),
+	// 分析器:預設 want LLM 引擎;-llm mock 改用假分析器(供 web 實際操作,免連 LLM)。
+	var analyzer llm.Analyzer
+	if *llmKind == "mock" {
+		// mock 不接真 LLM:送出觸發預設情境,直接用 store 寫 entry(走相同的
+		// FindOrCreateTrip 歸組路徑)。不需 BindSink/BindStore(那是 want 工具用的)。
+		analyzer = llm.NewMock(st)
+		log.Printf("LLM 分析器: mock(假 LLM,送出觸發預設情境)")
+	} else {
+		// want LLM 引擎(WantPool,per-session orchestrator 外殼)。初始化失敗直接 fatal。
+		pool, err := llm.NewWantPool()
+		if err != nil {
+			log.Fatalf("初始化 want 分析器失敗: %v", err)
+		}
+		analyzer = pool
+		// 注入條目持久化:record_entry 工具解析出的條目同步寫進 DB(entry 為主體,
+		// 獨立寫入),回傳新 entry ID。
+		wanttools.BindSink(func(channelID string, e wanttools.RecordedEntry) (string, error) {
+			id := "ent_" + randHex()
+			// 依時間自動歸組:有跨度的區間事件框出行程,落在範圍內的單點事件歸入同一 Trip。
+			// 歸組失敗不阻斷記事(tripID 留 nil),確保條目仍寫入。
+			tripID, err := st.FindOrCreateTrip(channelID, e.Start, e.End, e.Item)
+			if err != nil {
+				log.Printf("FindOrCreateTrip 失敗(條目仍記錄): %v", err)
+				tripID = nil
+			}
+			err = st.InsertEntry(model.Entry{
+				ID:        id,
+				ChannelID: channelID,
+				Item:      e.Item,
+				Start:     e.Start,
+				End:       e.End,
+				AllDay:    e.AllDay,
+				TripID:    tripID,
+				CreatedAt: nowUTC(),
+			})
+			return id, err
 		})
-		return id, err
-	})
-	// 提供 query_entries 工具查詢用的 store:agent 提問時自己按時間範圍查條目。
-	wanttools.BindStore(st)
-	log.Printf("LLM 分析器: want 引擎(WantPool)")
+		// 提供 query_entries 工具查詢用的 store:agent 提問時自己按時間範圍查條目。
+		wanttools.BindStore(st)
+		log.Printf("LLM 分析器: want 引擎(WantPool)")
+	}
 
 	signer := auth.NewSigner(*jwtSecret, 30*24*time.Hour)
 	srv := api.New(st, analyzer, signer, *devMode)
