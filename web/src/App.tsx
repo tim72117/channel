@@ -386,6 +386,8 @@ function ChatScreen({
   // 成員管理在頻道內開啟(對齊 iOS App 的聊天頁右上角入口)。
   const [showMembers, setShowMembers] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
+  // 點選項目時顯示詳細資訊。
+  const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -551,6 +553,16 @@ function ChatScreen({
     )
   }
 
+  // 點選項目時顯示詳細資訊。
+  if (selectedEntry) {
+    return (
+      <EntryDetailModal
+        entry={selectedEntry}
+        onBack={() => setSelectedEntry(null)}
+      />
+    )
+  }
+
   // 行程:點頻道上方的 Trip 按鈕 → 列出該行程的條目。
   if (activeTrip) {
     return (
@@ -610,7 +622,9 @@ function ChatScreen({
           <div className="entry-list">
             <div className="entry-list-title">事件 / 條目</div>
             {entries.map((e) => (
-              <EntryCard key={e.id} entry={e} />
+              <div key={e.id} onClick={() => setSelectedEntry(e)} style={{ cursor: 'pointer' }}>
+                <EntryCard entry={e} />
+              </div>
             ))}
           </div>
         )}
@@ -1299,6 +1313,113 @@ function LoginForm({
       >
         開發測試:可用 seed 帳號 alice@channel.dev / password
         (另有 bob、carol、dave)。或註冊新帳號。
+      </div>
+    </>
+  )
+}
+
+// 項目詳細資訊彈窗。
+function EntryDetailModal({
+  entry,
+  onBack,
+}: {
+  entry: Entry
+  onBack: () => void
+}) {
+  const when = entry.start
+    ? entry.allDay
+      ? entry.start.slice(0, 10)
+      : entry.start
+    : '未指定時間'
+
+  return (
+    <>
+      <div className="navbar">
+        <button className="btn" onClick={onBack}>
+          ‹ 返回
+        </button>
+        <span className="title">項目詳情</span>
+        <span className="btn" style={{ visibility: 'hidden' }} />
+      </div>
+      <div className="screen-body" style={{ padding: '16px' }}>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 12, color: 'var(--ios-gray)', marginBottom: 4 }}>
+            名稱
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>
+            {entry.item}
+          </div>
+
+          {entry.location && (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--ios-gray)', marginBottom: 4 }}>
+                地點
+              </div>
+              <div style={{ fontSize: 16, marginBottom: 16 }}>
+                📍 {entry.location}
+              </div>
+            </>
+          )}
+
+          <div style={{ fontSize: 12, color: 'var(--ios-gray)', marginBottom: 4 }}>
+            時間
+          </div>
+          <div style={{ fontSize: 16, marginBottom: 16 }}>
+            🕐 {when}
+            {entry.end ? ` ~ ${entry.end}` : ''}
+          </div>
+
+          {entry.summary && (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--ios-gray)', marginBottom: 4 }}>
+                摘要
+              </div>
+              <div style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+                {entry.summary}
+              </div>
+            </>
+          )}
+
+          {(entry.category || (entry.tags && entry.tags.length > 0)) && (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--ios-gray)', marginBottom: 4 }}>
+                標籤
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {entry.category && (
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      padding: '4px 10px',
+                      background: '#e8f0ff',
+                      color: '#007aff',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {entry.category}
+                  </span>
+                )}
+                {entry.tags?.map((t) => (
+                  <span
+                    key={t}
+                    style={{
+                      display: 'inline-block',
+                      padding: '4px 10px',
+                      background: '#f2f2f7',
+                      color: '#666',
+                      borderRadius: 6,
+                      fontSize: 12,
+                    }}
+                  >
+                    #{t}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </>
   )
