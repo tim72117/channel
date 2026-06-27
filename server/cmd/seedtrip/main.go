@@ -174,12 +174,21 @@ func cmdUpdateEntry(svc *tripsvc.Service, args []string) {
 	end      := fs.String("end", "", "結束時間")
 	location := fs.String("location", "", "地點")
 	summary  := fs.String("summary", "", "細節描述")
+	kind     := fs.String("kind", "", "類型: stay|flight|activity|note|car|restaurant|ticket")
+	detail   := fs.String("detail", "", "kind 專屬細節(JSON 字串)")
 	_ = fs.Parse(args)
 	if *id == "" {
 		fatal("update-entry 需要 -entry")
 	}
+	var detailMap map[string]any
+	if *detail != "" {
+		if err := json.Unmarshal([]byte(*detail), &detailMap); err != nil {
+			fatal("detail 必須是合法 JSON: %v", err)
+		}
+	}
 	if err := svc.UpdateEntry(tripsvc.UpdateEntryInput{
-		ID: *id, Item: *item, Start: *start, End: *end, Location: *location, Summary: *summary,
+		ID: *id, Item: *item, Start: *start, End: *end, Location: *location,
+		Summary: *summary, Kind: *kind, Detail: detailMap,
 	}); err != nil {
 		fatal("update-entry: %v", err)
 	}
@@ -189,7 +198,7 @@ func cmdUpdateEntry(svc *tripsvc.Service, args []string) {
 func cmdNotify(args []string) {
 	fs := flag.NewFlagSet("notify", flag.ExitOnError)
 	channel := fs.String("channel", "", "頻道 ID(必填)")
-	apiURL  := fs.String("api", "http://localhost:8080", "server base URL")
+	apiURL := fs.String("api", "http://localhost:8080", "server base URL")
 	_ = fs.Parse(args)
 	if *channel == "" {
 		fatal("notify 需要 -channel")

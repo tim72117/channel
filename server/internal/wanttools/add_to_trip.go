@@ -3,7 +3,7 @@ package wanttools
 import (
 	"fmt"
 
-	"want/types"
+	"github.com/tim72117/want/types"
 )
 
 type AddToTripTool struct {

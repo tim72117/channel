@@ -2,12 +2,6 @@ module github.com/channel/server
 
 go 1.26.3
 
-// want 是裸名 module(module want)且為私有本地源碼,無法 go get,
-// 用 replace 指向本地 want 源碼。want 在 c:\www\want(相對 server/ 往上兩層)。
-require want v0.0.0-00010101000000-000000000000
-
-replace want => ../../want
-
 require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/olebedev/when v1.1.0
@@ -32,6 +26,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/tim72117/want v0.0.1 // indirect
 	github.com/ysmood/fetchup v0.2.3 // indirect
 	github.com/ysmood/goob v0.4.0 // indirect
 	github.com/ysmood/got v0.40.0 // indirect

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"want/types"
+	"github.com/tim72117/want/types"
 )
 
 func init() {

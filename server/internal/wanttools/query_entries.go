@@ -7,7 +7,7 @@ import (
 
 	"github.com/channel/server/internal/store"
 	"github.com/channel/server/internal/tripsvc"
-	"want/types"
+	"github.com/tim72117/want/types"
 )
 
 // entryStore 是 query_entries 工具用來查條目的 store(server 啟動時用 BindStore 注入實例)。

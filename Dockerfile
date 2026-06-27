@@ -23,14 +23,15 @@ RUN npm run build
 # want 放 /want,relative replace 才解析得到。
 FROM golang:1.26 AS build
 
+ARG GH_PAT
+RUN git config --global url."https://${GH_PAT}@github.com/".insteadOf "https://github.com/"
+
 # 先單獨複製 go.mod / go.sum 以利 layer 快取(相依沒變時不重抓)。
 COPY server/go.mod server/go.sum /src/server/
-COPY want/go.mod want/go.sum /want/
-RUN cd /src/server && go mod download
+RUN cd /src/server && GOPRIVATE=github.com/tim72117/want go mod download
 
 # 再複製完整源碼。
 COPY server/ /src/server/
-COPY want/ /want/
 
 # 把前端 dist 放到 server embed 路徑
 COPY --from=web-build /web/dist /src/server/cmd/server/web/dist

@@ -46,10 +46,12 @@ type entryRow struct {
 	// 所屬行程;NULL=未歸組。後端依時間自動歸組。
 	TripID *string `gorm:"column:trip_id;index"`
 	// LLM 標注(原本在 message 上,改存 entry)。
-	Category  *string   `gorm:"column:category"`
-	Tags      []string  `gorm:"column:tags;serializer:json"` // JSON 陣列存單一 TEXT 欄位
-	Summary   *string   `gorm:"column:summary"`
-	CreatedAt time.Time `gorm:"column:created_at;not null"`
+	Category  *string        `gorm:"column:category"`
+	Tags      []string       `gorm:"column:tags;serializer:json"`
+	Summary   *string        `gorm:"column:summary"`
+	Kind      *string        `gorm:"column:kind"`
+	Detail    map[string]any `gorm:"column:detail;serializer:json"`
+	CreatedAt time.Time      `gorm:"column:created_at;not null"`
 }
 
 func (entryRow) TableName() string { return "entries" }

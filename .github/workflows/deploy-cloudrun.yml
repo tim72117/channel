@@ -6,7 +6,6 @@ on:
     paths:
       - 'server/**'
       - 'web/**'
-      - 'want/**'
       - 'Dockerfile'
       - '.dockerignore'
       - '.github/workflows/deploy-cloudrun.yml'
@@ -27,9 +26,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: true
-          token: ${{ secrets.GH_PAT }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -46,6 +42,8 @@ jobs:
           service: ${{ env.CLOUD_RUN_SERVICE }}
           region: ${{ env.CLOUD_RUN_REGION }}
           source: .
+          build_environment_variables: |
+            GH_PAT=${{ secrets.GH_PAT }}
           env_vars: |
             DEV_MODE=false
             SEED=false

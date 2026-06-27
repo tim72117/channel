@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	types "want/types"
+	types "github.com/tim72117/want/types"
 )
 
 const (

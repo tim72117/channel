@@ -137,11 +137,13 @@ type UpdateEntryInput struct {
 	End      string
 	Location string
 	Summary  string
+	Kind     string
+	Detail   map[string]any
 }
 
 // UpdateEntry 更新一筆 entry 的可編輯欄位。
 func (s *Service) UpdateEntry(in UpdateEntryInput) error {
-	return s.st.UpdateEntry(in.ID, in.Item, in.Start, in.End, in.Location, in.Summary)
+	return s.st.UpdateEntry(in.ID, in.Item, in.Start, in.End, in.Location, in.Summary, in.Kind, in.Detail)
 }
 
 // DeleteTrip 刪除單一行程(解除底下 entries 的 tripID,不刪 entries 本身)。

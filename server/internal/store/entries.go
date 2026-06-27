@@ -20,6 +20,8 @@ func toEntry(r entryRow) model.Entry {
 		Category:  r.Category,
 		Tags:      r.Tags,
 		Summary:   r.Summary,
+		Kind:      r.Kind,
+		Detail:    r.Detail,
 		CreatedAt: r.CreatedAt,
 	}
 }
@@ -39,13 +41,15 @@ func (s *Store) InsertEntry(e model.Entry) error {
 		Category:  e.Category,
 		Tags:      e.Tags,
 		Summary:   e.Summary,
+		Kind:      e.Kind,
+		Detail:    e.Detail,
 		CreatedAt: e.CreatedAt,
 	}
 	return s.db.Create(&r).Error
 }
 
 // UpdateEntry 更新一筆 entry 的可編輯欄位；留空字串的欄位不更新。
-func (s *Store) UpdateEntry(id, item, start, end, location, summary string) error {
+func (s *Store) UpdateEntry(id, item, start, end, location, summary, kind string, detail map[string]any) error {
 	fields := map[string]any{}
 	if item != "" {
 		fields["item"] = item
@@ -61,6 +65,12 @@ func (s *Store) UpdateEntry(id, item, start, end, location, summary string) erro
 	}
 	if summary != "" {
 		fields["summary"] = summary
+	}
+	if kind != "" {
+		fields["kind"] = kind
+	}
+	if detail != nil {
+		fields["detail"] = detail
 	}
 	if len(fields) == 0 {
 		return nil

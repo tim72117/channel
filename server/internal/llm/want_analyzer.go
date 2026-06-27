@@ -11,9 +11,9 @@ import (
 	// 自訂 want 工具(record_entry):init() 註冊工具,並提供記錄 context/sink。
 	"github.com/channel/server/internal/wanttools"
 
-	wantorch "want/orchestrator"
-	wanttypes "want/types"
-	wantui "want/ui"
+	wantorch "github.com/tim72117/want/orchestrator"
+	wanttypes "github.com/tim72117/want/types"
+	wantui "github.com/tim72117/want/ui"
 )
 
 // WantAnalyzer 用 want 的 orchestrator(會自行載入 provider)實作 Analyzer。

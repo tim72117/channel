@@ -9,7 +9,7 @@ package llm
 // 故要讓此 Go 版生效,server/.agents/assistant.md 必須移除(否則磁碟版會蓋過)。
 
 import (
-	"want/pkg/agentreg"
+	"github.com/tim72117/want/pkg/agentreg"
 )
 
 func init() {
