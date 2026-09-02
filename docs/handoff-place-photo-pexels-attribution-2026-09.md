@@ -34,8 +34,29 @@
 - 曾在 `PhotoCarousel.tsx` 試做過「Pexels 來源純文字署名」的顯示效果，
   純測試性質、非正式需求，未保留，不需要重建。
 
+## 已完成：attraction 對應 place_id（`radar-map-prototype` 分支 commit `c85c068`）
+
+attraction（人工建檔景點）新增 `place_id` 欄位，可透過 CLI（`attraction-add
+-place-id` 或 `-place` 查詢自動帶入、`attraction-set-place-id` 補建既有
+資料）設定。前端 `AttractionInfoPanel`/`GeoOutlinePhoneInfoSheet` 在
+`attraction.placeId` 有值時改用 `PhotoCarousel` 顯示 Google/Pexels 雙
+來源照片（共用地點照片漸進補圖機制），沒有 `placeId` 時維持原本單張
+`landmarkPhotoUrl` fallback，不影響既有資料。`geo.Place.PlaceID` 序列
+化行為由隱藏改為輸出，已確認安全（place_id 本身無 Google TOS 保存
+限制，且逐一排查過所有序列化路徑）。
+
+**待確認事項**：
+- `attractionsync.compareFieldSpecs`（`server/internal/attractionsync/diff.go`）
+  目前**未**把 `PlaceID` 納入既有欄位同步比對範圍，只有新建記錄會帶入
+  來源方的 place_id，更新既有記錄不會動它——是否要納入正式同步比對
+  範圍待決定。
+- `attraction-set-place-id` 是子代理判斷後主動新增的維運指令，不在
+  原始任務範圍，若不需要可移除。
+
 ## 相關文件
 
 - `docs/audit-place-photo-cost-control-2026-09.md`：完整成本控制稽核
   紀錄（R1-R6）。
-- `CHANGELOG.md` v0.12.0／v0.12.1：這次對話已完成並發布的功能清單。
+- `CHANGELOG.md` v0.12.0／v0.12.1：漸進補圖機制已完成並發布的功能清單
+  （attraction 對應 place_id 這批目前只在 `radar-map-prototype` 分支，
+  尚未併入 `main`，CHANGELOG 未涵蓋）。
