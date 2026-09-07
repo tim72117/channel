@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
 import type { ClientConfig, GeoAttraction, GeoPlaceDetails } from '../api'
 import { fetchGeoPlaceDetails } from '../api'
 import { attractionBadges } from './geoInfoContent'
 import { curatedCategoryOf, CURATED_CATEGORY_ICONS, CURATED_CATEGORY_LABELS } from './geoCuratedCategoryStub'
 import { PhotoCarousel } from './PhotoCarousel'
+import { DesktopInfoCard } from './DesktopInfoCard'
 import styles from './AttractionInfoPanel.module.css'
 
 // AttractionInfoPanel:attraction(人工建檔的景點區域,見 model.Attraction)
-// 專用的介紹圖卡,獨立於 GeoInfoPanel(飯店/推薦地點/Google 原生 POI 共用
-// 的那個)之外——理由是這兩者的操作集合已經完全不同:GeoInfoPanel 的
+// 專用的介紹圖卡,獨立於 PlacePanel(飯店/推薦地點/Google 原生 POI 共用
+// 的那個)之外——理由是這兩者的操作集合已經完全不同:PlacePanel 的
 // 「加入候選/加入行程」按鈕組是給還沒被選進行程規劃的地點用的,而
 // attraction 本身不接受被加入候選籃或行程(見 DesktopLayout.tsx
 // attractionInfoContent 不帶 candidate 欄位的說明)。與其在同一個元件裡
@@ -23,12 +23,13 @@ import styles from './AttractionInfoPanel.module.css'
 // 羅盤的「附近景點」清單(見下方 nearby)已經是目前主要的延伸探索入口,
 // 不需要另一顆會改變地圖視角的按鈕並存。
 //
-// 版面(浮動卡片疊在地圖上方,標題/關閉鍵/照片/名稱/badges/簡介)刻意
-// 沿用跟 GeoInfoPanel 相同的視覺語言(見 AttractionInfoPanel.module.css
-// 與 GeoInfoPanel.module.css 的對應規則),只是各自獨立一份、不共用
-// class——兩份卡片的內容結構目前剛好相同,但這是巧合不是保證,attraction
-// 之後若要加上「知名度/景點數量/範圍半徑」以外的專屬呈現(例如底下景點
-// 清單預覽),不需要先拆解一個共用元件的職責邊界。
+// 版面(浮動卡片疊在地圖上方,標題/關閉鍵/照片/名稱/badges/簡介)外框
+// (定位/避讓/關閉鍵/捲動容器)共用 DesktopInfoCard(見該元件開頭的完整
+// 說明——level 4/5 地標點擊需要讓「地點卡」跟這張主題卡並存疊放,兩者
+// 的定位規則必須保持精確同步,逐字複製一份容易漏改其中一邊),內容本身
+// (照片/名稱/badges/簡介/附近景點清單)仍各自獨立實作,attraction 之後
+// 若要加上「知名度/景點數量/範圍半徑」以外的專屬呈現(例如底下景點清單
+// 預覽),不需要先拆解共用外框的職責邊界。
 export function AttractionInfoPanel({
   attraction,
   cfg,
@@ -42,12 +43,12 @@ export function AttractionInfoPanel({
   // cfg:attraction.placeId 有值時,用來呼叫 fetchGeoPlaceDetails 補查
   // 「地點照片漸進補圖機制」的雙來源照片(見下方 placeDetails effect 的
   // 完整說明)——沒有 placeId 的 attraction(舊資料,尚未補上 place_id)
-  // 不會用到這個 prop,但型別上仍列為必填,理由同 GeoInfoPanel 系列元件
+  // 不會用到這個 prop,但型別上仍列為必填,理由同 PlacePanel 系列元件
   // 一貫要求呼叫端傳入 cfg 的既有慣例,不做成 optional 讓「忘記傳」這種
   // 情況能在編譯期被抓到,而不是等到執行期才發現查詢悄悄被跳過。
   cfg: ClientConfig
   onClose: () => void
-  // shiftBy:理由同 GeoInfoPanel.tsx 的同名 prop——右緣可能同時有
+  // shiftBy:理由同 PlacePanel.tsx 的同名 prop——右緣可能同時有
   // GeoHotelSidebar 與對話浮動小匡,由呼叫端判斷目前實際被哪個佔用後
   // 傳入對應值,把卡片推到它左側。
   shiftBy?: 'none' | 'hotel' | 'chat'
@@ -58,7 +59,7 @@ export function AttractionInfoPanel({
   // 判斷,沒有內容時不留一個空標題。
   nearby?: { attraction: GeoAttraction; minutes: number }[]
   // onSelectNearby:點擊清單項目觸發——呼叫端(DesktopLayout.tsx)開啟
-  // 這個精選點自己的「地點」卡片(GeoInfoPanel,見 openedNearbyAttraction
+  // 這個精選點自己的「地點」卡片(PlacePanel,見 openedNearbyAttraction
   // 的完整說明),疊在這張主題卡左側,不是切換掉它。
   onSelectNearby?: (attraction: GeoAttraction) => void
   // onHoverNearby:滑鼠移入/移出清單項目時觸發(移出傳 null)——地圖上
@@ -71,7 +72,7 @@ export function AttractionInfoPanel({
 }) {
   // placeDetails:attraction.placeId 有值時,補查一次「地點照片漸進補圖
   // 機制」的雙來源照片(Google/Pexels,見 handleGeoPlaceDetails 的完整
-  // 說明)——不重新發明呼叫邏輯,直接沿用 GeoInfoPanel/
+  // 說明)——不重新發明呼叫邏輯,直接沿用 PlacePanel/
   // GeoOutlinePhoneInfoSheet 走的同一支 fetchGeoPlaceDetails 端點,取回
   // 的 googlePhotoUrls/pexelsPhotoUrls 交給 PhotoCarousel 顯示,兩份清單
   // 皆空(或查詢失敗、尚未查完)時 PhotoCarousel 的 fallbackUrl 機制會
@@ -109,75 +110,69 @@ export function AttractionInfoPanel({
 
   const badges = attractionBadges(attraction)
 
-  const shiftClass = shiftBy === 'chat' ? ` ${styles.shiftedChat}` : shiftBy === 'hotel' ? ` ${styles.shiftedHotel}` : ''
   return (
-    <div className={`${styles.panel}${shiftClass}`}>
-      <button type="button" className={styles.closeBtn} onClick={onClose} title="關閉">
-        <X size={16} strokeWidth={2} />
-      </button>
-      <div className={styles.body}>
-        <div className={styles.imageWrap}>
-          <PhotoCarousel
-            googlePhotoUrls={placeId ? placeDetails?.googlePhotoUrls : undefined}
-            pexelsPhotoUrls={placeId ? placeDetails?.pexelsPhotoUrls : undefined}
-            fallbackUrl={attraction.landmarkPhotoUrl}
-            alt={attraction.landmarkName ?? attraction.name}
-          />
-        </div>
-        <div className={styles.content}>
-          <h2 className={styles.name}>{attraction.name}</h2>
-          {attraction.landmarkName && attraction.landmarkName !== attraction.name && (
-            <span className={styles.landmarkName}>{attraction.landmarkName}</span>
-          )}
-          {badges.length > 0 && (
-            <div className={styles.metaRow}>
-              {badges.map((b) => (
-                <span key={b} className={styles.badge}>{b}</span>
-              ))}
-            </div>
-          )}
-          {attraction.summary ? (
-            <p className={styles.summary}>{attraction.summary}</p>
-          ) : (
-            <p className={styles.summaryEmpty}>這個地點還沒有簡介資料。</p>
-          )}
-          {nearby && nearby.length > 0 && (
-            <div className={styles.nearbySection}>
-              <p className={styles.nearbyTitle}>附近景點</p>
-              <div className={styles.nearbyList}>
-                {nearby.map(({ attraction: n, minutes }) => {
-                  const category = curatedCategoryOf(n.name)
-                  const CategoryIcon = category ? CURATED_CATEGORY_ICONS[category] : null
-                  return (
-                    <button
-                      key={n.name}
-                      type="button"
-                      className={styles.nearbyItem}
-                      onClick={() => onSelectNearby?.(n)}
-                      onMouseEnter={() => onHoverNearby?.(n)}
-                      onMouseLeave={() => onHoverNearby?.(null)}
-                    >
-                      <div className={styles.nearbyItemHead}>
-                        {CategoryIcon && (
-                          <CategoryIcon
-                            size={13}
-                            strokeWidth={2}
-                            className={styles.nearbyCategoryIcon}
-                            aria-label={CURATED_CATEGORY_LABELS[category!]}
-                          />
-                        )}
-                        <span className={styles.nearbyName}>{n.name}</span>
-                        <span className={styles.nearbyMinutes}>約 {minutes} 分</span>
-                      </div>
-                      {n.summary && <p className={styles.nearbySummary}>{n.summary}</p>}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+    <DesktopInfoCard onClose={onClose} shiftBy={shiftBy}>
+      <div className={styles.imageWrap}>
+        <PhotoCarousel
+          googlePhotoUrls={placeId ? placeDetails?.googlePhotoUrls : undefined}
+          pexelsPhotoUrls={placeId ? placeDetails?.pexelsPhotoUrls : undefined}
+          fallbackUrl={attraction.landmarkPhotoUrl}
+          alt={attraction.landmarkName ?? attraction.name}
+        />
       </div>
-    </div>
+      <div className={styles.content}>
+        <h2 className={styles.name}>{attraction.name}</h2>
+        {attraction.landmarkName && attraction.landmarkName !== attraction.name && (
+          <span className={styles.landmarkName}>{attraction.landmarkName}</span>
+        )}
+        {badges.length > 0 && (
+          <div className={styles.metaRow}>
+            {badges.map((b) => (
+              <span key={b} className={styles.badge}>{b}</span>
+            ))}
+          </div>
+        )}
+        {attraction.summary ? (
+          <p className={styles.summary}>{attraction.summary}</p>
+        ) : (
+          <p className={styles.summaryEmpty}>這個地點還沒有簡介資料。</p>
+        )}
+        {nearby && nearby.length > 0 && (
+          <div className={styles.nearbySection}>
+            <p className={styles.nearbyTitle}>附近景點</p>
+            <div className={styles.nearbyList}>
+              {nearby.map(({ attraction: n, minutes }) => {
+                const category = curatedCategoryOf(n.name)
+                const CategoryIcon = category ? CURATED_CATEGORY_ICONS[category] : null
+                return (
+                  <button
+                    key={n.name}
+                    type="button"
+                    className={styles.nearbyItem}
+                    onClick={() => onSelectNearby?.(n)}
+                    onMouseEnter={() => onHoverNearby?.(n)}
+                    onMouseLeave={() => onHoverNearby?.(null)}
+                  >
+                    <div className={styles.nearbyItemHead}>
+                      {CategoryIcon && (
+                        <CategoryIcon
+                          size={13}
+                          strokeWidth={2}
+                          className={styles.nearbyCategoryIcon}
+                          aria-label={CURATED_CATEGORY_LABELS[category!]}
+                        />
+                      )}
+                      <span className={styles.nearbyName}>{n.name}</span>
+                      <span className={styles.nearbyMinutes}>約 {minutes} 分</span>
+                    </div>
+                    {n.summary && <p className={styles.nearbySummary}>{n.summary}</p>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </DesktopInfoCard>
   )
 }

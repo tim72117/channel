@@ -12,7 +12,7 @@ import { minZoomForLevel } from './geoAttractionOverlay'
 import { useAttractionOverlays } from './useAttractionOverlays'
 import { useSearchResultMarkers } from './useSearchResultMarkers'
 import { useTripEntryMarkers } from './useTripEntryMarkers'
-import styles from './GeoOutlineMap.module.css'
+import styles from './ExploreMap.module.css'
 
 // 地理輪廓底圖(構想 6,見 docs/TRIP_PLANNING_DESIGN_DISCUSSION.md)——桌面版。
 //
@@ -114,7 +114,7 @@ function sameAttractionsContent(a: GeoAttraction[], b: GeoAttraction[]): boolean
   return a.every((d, i) => d.name === b[i].name && d.lat === b[i].lat && d.lng === b[i].lng)
 }
 
-export function GeoOutlineMap({
+export function ExploreMap({
   cfg,
   initialCenter,
   tripEntries = [],
@@ -136,6 +136,8 @@ export function GeoOutlineMap({
   onAttractionSelect,
   onSearchResultSelect,
   onPoiSelect,
+  onAttractionOpenPlaceDetails,
+  onAttractionOpenPlaceWithoutGoogle,
   onCenterChange,
   panTarget,
   selectedKey,
@@ -169,7 +171,7 @@ export function GeoOutlineMap({
   // 共用同一份輸入值與查詢邏輯(GeoOutlinePanel.tsx 的 searchTrigger
   // effect,由 DesktopLayout.tsx 的 geoSearchCity state 中介),這裡只是
   // 多一個不需要先展開候選籃就能觸發搜尋的入口,不是獨立的第二套搜尋
-  // 狀態。全部 optional——呼叫端(/demo/pace 等其他掛載 GeoOutlineMap 的
+  // 狀態。全部 optional——呼叫端(/demo/pace 等其他掛載 ExploreMap 的
   // 情境,若未來出現)可以選擇不接這組 prop,此時不渲染搜尋框。
   city?: string
   onCityChange?: (city: string) => void
@@ -274,6 +276,35 @@ export function GeoOutlineMap({
   // 只傳一個 ID 讓外層自己決定何時查詢——這個元件本來就持有 cfg,沒有
   // 理由把查詢責任推給不見得拿得到 cfg 時機的呼叫端。
   onPoiSelect?: (details: GeoPlaceDetails) => void
+  // onAttractionOpenPlaceDetails:非主題點地標(見下方
+  // handleAttractionClickRouted)點擊時的地點卡開啟方式——跟上面的
+  // onPoiSelect 差別在「取代 vs 並存」:onPoiSelect(經 geo.selectPoi)
+  // 走 geoSelection 互斥狀態機,會把當下開著的 AttractionInfoPanel(主題
+  // 卡)整個換掉;這個 callback 由呼叫端(桌面版 DesktopLayout.tsx)接上
+  // 「附近景點清單」點擊已經在用的並存機制(nearbyInfoContent),讓非主題
+  // 點地標的地點卡疊在主題卡左側,不關掉主題卡——使用者明確要求兩者要
+  // 能同時顯示。可選:手機版(單一 sheet 堆疊,天然互斥,沒有並存版面)
+  // 不傳這個 prop,此時 handleAttractionClickRouted 退回呼叫
+  // onPoiSelect,行為與並存機制導入前一致。
+  //
+  // 第二個參數 attraction:有值時代表這次點擊來源是地圖上的景點區域地標
+  // (handleAttractionClickRouted 呼叫時一定會帶),讓呼叫端能把
+  // attraction.summary(人工整理的介紹文字)一併附加到查回來的 Google
+  // Place Details 內容上,並存顯示(見 PlacePanel.tsx 的
+  // PlaceInfoContent.attractionSummary 完整說明)——地圖上直接點擊
+  // Google 原生 POI 圖標(下方 click 監聽器,沒有對應的 attraction 資料)
+  // 呼叫這個 callback 時不帶第二個參數。
+  onAttractionOpenPlaceDetails?: (details: GeoPlaceDetails, attraction?: GeoAttraction) => void
+  // onAttractionOpenPlaceWithoutGoogle:非主題點地標點擊,但沒有 placeId
+  // (查不到 Google Place Details)、或查詢失敗時的地點卡開啟方式——使用者
+  // 明確要求「非主題點點擊一律開地點卡,不再有退回開 attraction 自己
+  // 介紹卡(取代主題卡)的例外」,不論有沒有 placeId、查詢成不成功,結果
+  // 都要是地點卡。呼叫端(DesktopLayout.tsx)直接用 attraction 自己的
+  // 資料組地點卡內容(不查 Google),走跟 onAttractionOpenPlaceDetails
+  // 相同的並存/貼右緣判斷邏輯(見該 prop 的完整說明)。可選:沒有提供
+  // 時(手機版,單一 sheet 堆疊沒有這個並存需求)退回呼叫 onAttractionSelect
+  // (原本開 attraction 自己介紹卡的行為,對手機版沒有影響)。
+  onAttractionOpenPlaceWithoutGoogle?: (attraction: GeoAttraction) => void
   // onCenterChange:地圖 idle(拖曳/縮放動畫結束)時,把目前中心座標往上
   // 回報——供 GeoOutlinePanel.tsx 的城市搜尋框使用,讓「甜點」「apple」
   // 這類沒有明確指向單一地點的泛用關鍵字查詢,能帶上目前地圖中心當
@@ -391,16 +422,41 @@ export function GeoOutlineMap({
   // onPoiSelect 加進建圖 effect 的依賴陣列(那樣反而會導致地圖重建)。
   const onPoiSelectRef = useRef(onPoiSelect)
   onPoiSelectRef.current = onPoiSelect
+  // onAttractionSelectRef:理由同 onPoiSelectRef——下方
+  // handleAttractionClickRouted 是傳給 useAttractionOverlays 的
+  // callback,若直接閉包捕捉 onAttractionSelect,呼叫端每次重渲染傳入
+  // 新的內聯函式參照時不會被感知到。這裡雖然 useAttractionOverlays 是
+  // 每次渲染都重新呼叫(不像建圖 effect 只執行一次),用 ref 不是為了
+  // 避免陳舊閉包,而是讓 handleAttractionClickRouted 本身能維持穩定的
+  // useCallback 參照(依賴陣列不需要放 onAttractionSelect),避免
+  // useAttractionOverlays.ts 內部依賴 handleAttractionClick 的那個畫
+  // overlay 的 effect(見該檔案 filteredAttractions 依賴的建立/銷毀
+  // effect)因為這裡的參照每次渲染都變而不必要地重畫整批 overlay。
+  const onAttractionSelectRef = useRef(onAttractionSelect)
+  onAttractionSelectRef.current = onAttractionSelect
+  // onAttractionOpenPlaceDetailsRef:理由同 onPoiSelectRef——
+  // handleAttractionClickRouted 內的 fetchGeoPlaceDetails().then() 是
+  // 非同步回呼,執行當下必須讀到最新傳入的 prop,不能閉包捕捉掛載時的
+  // 舊值。
+  const onAttractionOpenPlaceDetailsRef = useRef(onAttractionOpenPlaceDetails)
+  onAttractionOpenPlaceDetailsRef.current = onAttractionOpenPlaceDetails
+  // onAttractionOpenPlaceWithoutGoogleRef:理由同上——
+  // handleAttractionClickRouted 內 fetchGeoPlaceDetails().catch() 跟沒有
+  // placeId 的同步分支都要讀到最新的 prop。
+  const onAttractionOpenPlaceWithoutGoogleRef = useRef(onAttractionOpenPlaceWithoutGoogle)
+  onAttractionOpenPlaceWithoutGoogleRef.current = onAttractionOpenPlaceWithoutGoogle
   // onCenterChangeRef:理由同 onPoiSelectRef——idle listener 註冊在只
   // 執行一次的建圖 effect 裡,需要用 ref 讀取最新的 callback 參照。
   const onCenterChangeRef = useRef(onCenterChange)
   onCenterChangeRef.current = onCenterChange
   const [err, setErr] = useState<string | null>(null)
   const [mapReady, setMapReady] = useState(false)
-  // zoom:即時反映地圖目前縮放層級,傳給 useAttractionOverlays 依
-  // maxLevelForZoom 篩選要顯示哪些知名度分級的地標(見該 hook 的
-  // filteredAttractions 說明)。初始值對齊 Map 建構時的 zoom: 12(見下方
-  // useEffect)。
+  // zoom:即時反映地圖目前縮放層級——供「探索周邊」查詢半徑換算
+  // (見下方 radiusMeters)與點擊景點區域後判斷是否需要額外拉近
+  // (見 panTarget effect 的 minZoomForLevel 判斷)使用。不再傳給
+  // useAttractionOverlays(該 hook 已改用 isTheme 布林判斷主題點是否
+  // 顯示,不再需要依 zoom 換算知名度分級上限,見該 hook 開頭的完整
+  // 說明)。初始值對齊 Map 建構時的 zoom: 12(見下方 useEffect)。
   const [zoom, setZoom] = useState(12)
   // bounds:即時反映地圖目前可視範圍,供下方 panTarget effect 的
   // onlyIfOutOfView 判斷使用(見該欄位的完整說明)。初始 null——地圖剛
@@ -606,16 +662,32 @@ export function GeoOutlineMap({
         // google.maps.IconMouseEvent,MapMouseEvent 的擴充)——點地圖空白
         // 處的一般點擊沒有這個欄位,用它來分辨這次點擊是不是點到 POI。
         // event.stop() 阻止 Google 預設彈出的小資訊卡(InfoWindow 樣式),
-        // 讓使用者改看我們自己的 GeoInfoPanel(理由見 onPoiSelect 的
+        // 讓使用者改看我們自己的 PlacePanel(理由見 onPoiSelect 的
         // 說明)。查詢失敗(找不到該地點、額度用盡等)不特別處理錯誤
         // 提示,直接不觸發 onPoiSelect——維持地圖仍可正常瀏覽,不彈錯誤
         // 訊息打斷使用者,理由同下方 handleCategoryClick 查附近推薦失敗
         // 時的處理方式。
+        //
+        // 優先呼叫 onAttractionOpenPlaceDetailsRef(沒有提供才退回
+        // onPoiSelectRef)——理由同 handleAttractionClickRouted 的完整
+        // 說明:使用者明確要求「點地圖上的 place 或小的 attraction 都不要
+        // 關閉已開啟的 attraction」,AttractionInfoPanel(主題卡)永遠
+        // 置右最優先,這裡點擊 Google 原生 POI 圖標的地點卡也要走並存
+        // 路徑,不能透過 geo.selectPoi(geoSelection 互斥狀態機)把已開啟
+        // 的主題卡關掉。手機版(GeoOutlinePhoneView.tsx)沒有並存版面,
+        // 不傳這個 prop,此處退回 onPoiSelectRef,行為與並存機制導入前
+        // 一致。
         mapRef.current.addListener('click', (event: google.maps.IconMouseEvent) => {
           if (!event.placeId) return
           event.stop()
           fetchGeoPlaceDetails(cfg, event.placeId)
-            .then((details) => onPoiSelectRef.current?.(details))
+            .then((details) => {
+              if (onAttractionOpenPlaceDetailsRef.current) {
+                onAttractionOpenPlaceDetailsRef.current(details)
+              } else {
+                onPoiSelectRef.current?.(details)
+              }
+            })
             .catch(() => {})
         })
         setMapReady(true)
@@ -839,15 +911,74 @@ export function GeoOutlineMap({
   // 不互相依賴)。飯店/推薦地點/搜尋結果原本各自獨立的三個 marker hook
   // (useHotelMarkers/usePlaceMarkers/useGeocodeCandidateMarkers)已合併成
   // 單一 useSearchResultMarkers(見 api.ts GeoSearchResult 的完整說明)。
+  // handleAttractionClickRouted:點擊地標圖示時,依「是否為主題點」分岔
+  // 要開哪一種介紹卡——直接讀 GeoAttraction.isTheme(後端
+  // model.Attraction.IsTheme,見該欄位完整說明)。主題點(isTheme===true)
+  // 開 attraction 自己的介紹卡(AttractionInfoPanel,即 selectAttraction
+  // 顯示的那種)。
+  //
+  // 非主題點(isTheme===false)一律開地點卡(PlacePanel/
+  // GeoOutlinePhoneInfoSheet)——使用者明確要求「非主題點點擊一律開地點
+  // 卡,不再有退回開 attraction 自己介紹卡(取代主題卡)的例外」,不論
+  // 有沒有 placeId、查詢成不成功:
+  //   - 有 placeId:查 Google Place Details 當主要內容(評分/雙來源
+  //     照片),查完優先呼叫 onAttractionOpenPlaceDetailsRef(桌面版接上
+  //     「附近景點清單」既有的並存機制,讓地點卡疊在目前開著的
+  //     attraction 主題卡左側,不關掉它),沒有提供才退回 onPoiSelectRef
+  //     (手機版走這條路,單一 sheet 堆疊天然互斥,沒有並存版面)。查詢
+  //     失敗(catch)時退回下面「沒有 placeId」的同一條路徑,不靜默什麼
+  //     都不做——查詢失敗不代表這個地點沒有資料可看,attraction 自己的
+  //     介紹文字/照片仍然存在。
+  //   - 沒有 placeId(或上面查詢失敗):不查 Google,呼叫
+  //     onAttractionOpenPlaceWithoutGoogleRef,由呼叫端直接用 attraction
+  //     自己的資料組地點卡內容,沒有提供才退回 onAttractionSelectRef
+  //     (手機版目前沒有這個並存版面的對應實作,維持原本開 attraction
+  //     介紹卡的行為,見該 prop 的完整說明)。
+  // 即時查詢 Google Places 得到的結果(不是人工建檔的景點區域,見上方
+  // filteredAttractions 對 d.level == null 的說明)isTheme 固定是
+  // false、沒有 placeId,會落入「沒有 placeId」分支——這批資料本來就
+  // 沒有 attraction 介紹可組,呼叫端(DesktopLayout.tsx)對這種情況會
+  // 自然產生一張內容單薄(只有名稱/座標)的地點卡,不是錯誤。用 ref 而非
+  // 直接呼叫 prop,理由同 onPoiSelectRef 的說明,避免用到掛載當下的
+  // 舊值。
+  const handleAttractionClickRouted = useCallback((d: GeoAttraction) => {
+    if (d.isTheme) {
+      onAttractionSelectRef.current?.(d)
+      return
+    }
+    if (d.placeId) {
+      fetchGeoPlaceDetails(cfg, d.placeId)
+        .then((details) => {
+          if (onAttractionOpenPlaceDetailsRef.current) {
+            onAttractionOpenPlaceDetailsRef.current(details, d)
+          } else {
+            onPoiSelectRef.current?.(details)
+          }
+        })
+        .catch(() => {
+          if (onAttractionOpenPlaceWithoutGoogleRef.current) {
+            onAttractionOpenPlaceWithoutGoogleRef.current(d)
+          } else {
+            onAttractionSelectRef.current?.(d)
+          }
+        })
+      return
+    }
+    if (onAttractionOpenPlaceWithoutGoogleRef.current) {
+      onAttractionOpenPlaceWithoutGoogleRef.current(d)
+    } else {
+      onAttractionSelectRef.current?.(d)
+    }
+  }, [cfg])
+
   useAttractionOverlays({
     mapRef,
     mapReady,
     attractions,
-    zoom,
     selectedKey,
     hoverKey,
     candidateKeys,
-    onAttractionSelect,
+    onAttractionSelect: handleAttractionClickRouted,
     revealedAttractionNames,
     hoveredCuratedName,
   })
@@ -988,9 +1119,9 @@ export function GeoOutlineMap({
           搜尋框共用輸入值/查詢邏輯(見上方 city/onCityChange/onSearch
           prop 的說明),獨立疊在地圖右上角(不跟類別標籤列同一個 flex
           row,理由是那排已經靠左貼齊、放右側需要獨立定位),固定貼齊
-          最上緣(top:16px,見 GeoOutlineMap.module.css 的 .citySearch)
+          最上緣(top:16px,見 ExploreMap.module.css 的 .citySearch)
           ——讓使用者不需要先展開候選籃側欄就能直接在地圖上方搜尋城市。
-          GeoInfoPanel/AttractionInfoPanel 改往下避開這個搜尋框(見這兩個
+          PlacePanel/AttractionInfoPanel 改往下避開這個搜尋框(見這兩個
           元件的 .panel),而非反過來,因為搜尋框是常駐 UI。只有呼叫端
           有接這組 prop(目前只有 GeoOutlinePanel.tsx)才顯示。
           膠囊左側的 AI 按鈕(onOpenChat)是常駐右側對話欄收合時的快捷

@@ -1,13 +1,13 @@
 // geoAttractionClick:點擊地圖上的景點區域地標圖示時,決定「該怎麼放大
-// 地圖」與「該用多大的半徑查附近推薦地點」——從 GeoOutlineMap.tsx 的
+// 地圖」與「該用多大的半徑查附近推薦地點」——從 ExploreMap.tsx 的
 // handleAttractionClick 抽出的純決策邏輯,不碰 google.maps SDK 本身
-// (實際呼叫 fitBounds/panTo/setZoom 的動作留在 GeoOutlineMap.tsx,那裡
+// (實際呼叫 fitBounds/panTo/setZoom 的動作留在 ExploreMap.tsx,那裡
 // 才知道地圖實例與目前 zoom),讓「該做什麼」與「怎麼做」分開,前者才能
 // 不依賴 Google Maps 環境單獨測試。
 
-// 對齊 GeoOutlineMap.tsx 的 minZoomForLevel:給定一個知名度分級,回傳
+// 對齊 ExploreMap.tsx 的 minZoomForLevel:給定一個知名度分級,回傳
 // 「至少要縮放到多少 zoom 才看得到它」的最小 zoom 值——這裡重新匯出
-// 一份而非從 GeoOutlineMap.tsx import,是因為該檔案有大量 Google Maps
+// 一份而非從 ExploreMap.tsx import,是因為該檔案有大量 Google Maps
 // 型別匯入,若被這個純模組 import 會失去「不依賴 SDK」的測試優勢；兩處
 // 門檻表若之後調整,要記得同步修改(各自的檔案裡都有這則提醒)。
 export function minZoomForLevel(level: number): number {
@@ -28,7 +28,7 @@ export interface AttractionClickInput {
   level?: number
 }
 
-// AttractionClickPlan 是這個決策函式的完整輸出:呼叫端(GeoOutlineMap.tsx)
+// AttractionClickPlan 是這個決策函式的完整輸出:呼叫端(ExploreMap.tsx)
 // 依這個結果去呼叫對應的 Google Maps API,自己不需要重新判斷任何分支。
 export type AttractionClickPlan =
   | { kind: 'fit-bounds'; radiusMeters: number }

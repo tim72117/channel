@@ -61,7 +61,7 @@ import styles from './GeoOutlinePhoneView.module.css'
 // 'date-calendar' 日曆 sheet(GeoOutlinePhoneDateCalendarSheet)——2026-08
 //         新增,取代舊版 `.dateEdit` 區塊裡的 <input type="date"> +
 //         確定按鈕(現改用 DatePickerPopover 月曆格線 UI,對齊桌面版
-//         GeoInfoPanel.tsx 的既有升級,點選日期格子即視為確定)。兩條
+//         PlacePanel.tsx 的既有升級,點選日期格子即視為確定)。兩條
 //         push 路徑:(1) 候選沒有排定日期、行程本身也沒有排定日期時,
 //         由資訊卡直接 push(跳過 'date-picker',見上方說明);(2)
 //         'date-picker' 的「其他日期」按鈕 push,疊在 'date-picker' 之上,
@@ -80,7 +80,7 @@ type SheetEntry =
 // GeoOutlinePhoneView:手機版規劃地圖(geo-outline)主容器。第一階段是
 // 地圖瀏覽 + 唯讀資訊卡;第二階段(這次)新增候選籃——讓使用者能把地圖上
 // 瀏覽到的飯店/景點/地點加入候選籃,並排入行程的某一天。地圖引擎
-// (GeoOutlinePanel/GeoOutlineMap)與桌面版共用同一份,平台無關,這裡只
+// (GeoOutlinePanel/ExploreMap)與桌面版共用同一份,平台無關,這裡只
 // 負責手機版排版與候選籃資料流。
 //
 // 候選籃 UI 選用「從右側滑入的抽屜」(GeoOutlinePhoneCandidateDrawer),
@@ -102,7 +102,7 @@ type SheetEntry =
 // 從一側滑入的抽屜,選左側(候選籃已佔用右側滑入語意,見
 // GeoOutlinePhoneListDrawer.tsx 的說明)。資料來源對照桌面版
 // DesktopLayout.tsx 的 geo.searchResults——GeoOutlinePanel 本來就已經
-// 把 onSearchResultsChange 轉傳給 GeoOutlineMap(第一、二階段的
+// 把 onSearchResultsChange 轉傳給 ExploreMap(第一、二階段的
 // 手機版容器沒有接這個 callback,地圖仍會查詢,只是查到的結果沒有
 // 清單可以顯示,這次補上)。清單合併顯示飯店/推薦地點/搜尋結果,不分頁
 // 切換——對齊桌面版 GeoHotelSidebar.tsx 現行的合併清單設計,原本這裡
@@ -158,8 +158,8 @@ export function GeoOutlinePhoneView({
   onOpenTrips: () => void
   // theme:這個 App 的深色/淺色模式偏好(useAppState() 的 theme,見
   // theme.ts),由 PhoneContent.tsx 中介(props.theme)——原封不動轉傳給
-  // GeoOutlinePanel → GeoOutlineMap 決定建圖時的 colorScheme,見
-  // GeoOutlineMap.tsx 對這個 prop 的完整說明。這個元件本身不消費 theme,
+  // GeoOutlinePanel → ExploreMap 決定建圖時的 colorScheme,見
+  // ExploreMap.tsx 對這個 prop 的完整說明。這個元件本身不消費 theme,
   // 純轉傳。
   theme?: Theme
 }) {
@@ -333,7 +333,7 @@ export function GeoOutlinePhoneView({
         }}
         onSearchStart={() => {
           // 類別標籤/「搜尋這個區域」按鈕這兩個入口的「查詢開始」時機
-          // ——見 GeoOutlineMap.tsx onSearchStart 的完整說明,這兩個入口
+          // ——見 ExploreMap.tsx onSearchStart 的完整說明,這兩個入口
           // 不經過上面的 onSearch,故需要各自接這個獨立的 callback 才能
           // 涵蓋全部三個入口。sheetStack 的操作跟上面 onSearch 完全對稱
           // (closeAll 再 push 'list')——理由相同:三個查詢入口都代表
@@ -380,7 +380,7 @@ export function GeoOutlinePhoneView({
         externalGeocodeCandidateSelect={geo.searchResultSelect}
         onTripEntriesChange={geo.onTripEntriesChange}
         // onAttractionSelect/onSearchResultSelect/onPoiSelect:點地圖上的
-        // 自建景點/飯店與推薦地點/POI marker,由 GeoOutlineMap 內部觸發
+        // 自建景點/飯店與推薦地點/POI marker,由 ExploreMap 內部觸發
         // ——這三個入口跟清單 onSelect(下方)不同,沒有「從清單點進來」
         // 這件事,故用 sheetStack.replace(而非 push)——理由見上方
         // SheetEntry 的說明:連續點不同 marker 應該直接換資訊卡內容,

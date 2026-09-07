@@ -1,17 +1,17 @@
 import type { GeoAttraction, GeoPlaceDetails, GeoSearchResult } from '../api'
-import type { GeoInfoContent } from './GeoInfoPanel'
+import type { PlaceInfoContent } from './PlacePanel'
 import { type GeoCandidate, searchResultToCandidate } from './geoCandidateHelpers'
 
 // searchResultInfoContent:把飯店/推薦地點/搜尋結果三種來源統一後的
-// GeoSearchResult 轉成 GeoInfoPanel(桌面版)/GeoOutlinePhoneInfoSheet
-// (手機版)共用的 GeoInfoContent 形狀——取代原本各自獨立的
+// GeoSearchResult 轉成 PlacePanel(桌面版)/GeoOutlinePhoneInfoSheet
+// (手機版)共用的 PlaceInfoContent 形狀——取代原本各自獨立的
 // hotelInfoContent/placeInfoContent/geocodeCandidateInfoContent 三個函式
 // (見 api.ts GeoSearchResult 的完整說明,三種來源已合併成同一份清單、
-// 同一套邏輯)。candidate 欄位是 GeoInfoContent 本身既有的 optional 欄位
-// (見 GeoInfoPanel.tsx 的型別定義),供呼叫端決定要不要驅動「加入候選」
+// 同一套邏輯)。candidate 欄位是 PlaceInfoContent 本身既有的 optional 欄位
+// (見 PlacePanel.tsx 的型別定義),供呼叫端決定要不要驅動「加入候選」
 // 按鈕——geocode 類型純定位用途,不能加入候選籃(理由見 GeoSearchResult
 // 的說明),固定不帶 candidate;hotel/place 才組出對應的 GeoCandidate。
-export function searchResultInfoContent(r: GeoSearchResult): GeoInfoContent {
+export function searchResultInfoContent(r: GeoSearchResult): PlaceInfoContent {
   if (r.kind === 'geocode') {
     return { name: r.name, subtitle: r.address, badges: [] }
   }
@@ -20,7 +20,7 @@ export function searchResultInfoContent(r: GeoSearchResult): GeoInfoContent {
     photoUrl: r.photoUrl,
     // placeId:只有 place 來源(GeoGeocodeCandidate,見該型別的說明)才
     // 可能有值,hotel(GeoHotel)本身已經有 eager photoUrl、
-    // 沒有 placeId——見 GeoInfoContent.placeId 的完整說明,呼叫端據此決定
+    // 沒有 placeId——見 PlaceInfoContent.placeId 的完整說明,呼叫端據此決定
     // 要不要另外補查照片。
     placeId: r.placeId,
     subtitle: r.address,
@@ -42,9 +42,9 @@ export function searchResultInfoContent(r: GeoSearchResult): GeoInfoContent {
 // 背景化重構影響,仍同步回傳完整 photoUrl),且這支查詢本身沒有回傳
 // placeId 讓候選籃形狀可以承接,故候選籃項目這裡不帶 photoUrl(候選籃
 // UI 目前也沒有為 place 分支顯示候選卡片縮圖的路徑,僅供加入候選/寫入
-// entry 使用,不影響任何畫面呈現)。頂層的 GeoInfoContent.photoUrl 仍然
+// entry 使用,不影響任何畫面呈現)。頂層的 PlaceInfoContent.photoUrl 仍然
 // 完整帶入,資訊卡本身的照片顯示不受影響。
-export function poiInfoContent(details: GeoPlaceDetails): GeoInfoContent {
+export function poiInfoContent(details: GeoPlaceDetails): PlaceInfoContent {
   return {
     name: details.name,
     photoUrl: details.photoUrl,
@@ -67,8 +67,8 @@ export function poiInfoContent(details: GeoPlaceDetails): GeoInfoContent {
 // attractionBadges:自建景點區域(GeoAttraction)的景點數量/範圍半徑組成
 // 的 badges 陣列——AttractionInfoPanel.tsx(桌面版)與
 // GeoOutlinePhoneInfoSheet.tsx(手機版)共用同一套組裝規則,理由同上方
-// 三個函式,只是這裡的呼叫端不需要組出完整 GeoInfoContent(attraction
-// 走獨立分支,不轉換成 GeoInfoContent 形狀,見 AttractionInfoPanel.tsx
+// 三個函式,只是這裡的呼叫端不需要組出完整 PlaceInfoContent(attraction
+// 走獨立分支,不轉換成 PlaceInfoContent 形狀,見 AttractionInfoPanel.tsx
 // 開頭的說明)。
 //
 // 2026-08:不再顯示「知名度 Lx」——level 現在身兼「主題點/精選點」的內部
@@ -85,7 +85,7 @@ export function attractionBadges(attraction: GeoAttraction): string[] {
 
 // attractionToInfoContent:2026-08 新增——「附近景點」清單(散策羅盤,見
 // AttractionInfoPanel.tsx 的 nearby)點擊精選點時,把 GeoAttraction 轉成
-// GeoInfoContent,讓精選點能用跟飯店/推薦地點一樣的 GeoInfoPanel(可加入
+// PlaceInfoContent,讓精選點能用跟飯店/推薦地點一樣的 PlacePanel(可加入
 // 候選/加入行程)展示,而不是 AttractionInfoPanel 那種唯讀介紹卡——理由
 // 是精選點(茶屋、店舖、餐廳這類使用者可能真的想排進行程的地點)跟
 // attraction 原本設計給大範圍景點區域(整個古城、整條老街)的唯讀定位不同
@@ -106,7 +106,7 @@ export function attractionBadges(attraction: GeoAttraction): string[] {
 // kind:'entry'/inTrip:true 的形狀重新出現,走的是完全支援的既有分支)
 // 沒有問題,直接進候選籃這個次要按鈕的畫面呈現尚未補上,留待之後需要時
 // 再處理。
-export function attractionToInfoContent(attraction: GeoAttraction): GeoInfoContent {
+export function attractionToInfoContent(attraction: GeoAttraction): PlaceInfoContent {
   return {
     name: attraction.name,
     photoUrl: attraction.landmarkPhotoUrl,
@@ -122,14 +122,14 @@ export function attractionToInfoContent(attraction: GeoAttraction): GeoInfoConte
 // candidateInfoContent:候選籃項目本體被點擊時開資訊卡(桌面版
 // GeoCandidateSidebar/AddFromCandidateSidebar、手機版候選籃抽屜共用)
 // ——candidate 欄位刻意不帶(undefined),因為這個項目已經在候選籃裡,
-// GeoInfoPanel/GeoOutlinePhoneInfoSheet 不需要再顯示一次「加入候選」
-// 按鈕(理由同 GeoInfoContent.candidate 欄位的 optional 設計)。候選籃
+// PlacePanel/GeoOutlinePhoneInfoSheet 不需要再顯示一次「加入候選」
+// 按鈕(理由同 PlaceInfoContent.candidate 欄位的 optional 設計)。候選籃
 // 目前仍不會出現 kind==='attraction' 的「候選中」項目進到這個函式——
 // attractionToInfoContent(見上方)只有「選日期排入行程」這條路徑會真的
 // 建立資料,寫入後轉成 kind:'entry' 形狀,不會停留在 attraction 候選
 // 形狀被點擊觸發這裡,故這裡暫時不需要處理該分支。entry 種類(行程本身
 // 已有座標的既有內容)用 location 當 subtitle,其餘兩種沿用 address。
-export function candidateInfoContent(c: Exclude<GeoCandidate, { kind: 'attraction' }>): GeoInfoContent {
+export function candidateInfoContent(c: Exclude<GeoCandidate, { kind: 'attraction' }>): PlaceInfoContent {
   if (c.kind === 'entry') {
     return { name: c.name, subtitle: c.location ?? undefined, badges: [] }
   }

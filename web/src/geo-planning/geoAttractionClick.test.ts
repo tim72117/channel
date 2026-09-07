@@ -40,7 +40,7 @@ describe('planAttractionClick', () => {
   })
 })
 
-describe('minZoomForLevel(與 GeoOutlineMap.tsx 的門檻表同步)', () => {
+describe('minZoomForLevel(與 ExploreMap.tsx 的門檻表同步)', () => {
   it.each([
     [1, 0],
     [2, 11],

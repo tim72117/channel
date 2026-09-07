@@ -21,7 +21,7 @@ export const CURATED_CATEGORY_LABELS: Record<CuratedCategory, string> = {
   street: '街景/散策重點',
 }
 
-// CURATED_CATEGORY_ICONS:跟 GeoOutlineMap.tsx CATEGORY_TAGS 用同一組
+// CURATED_CATEGORY_ICONS:跟 ExploreMap.tsx CATEGORY_TAGS 用同一組
 // lucide-react 圖示語彙(UtensilsCrossed 直接沿用「餐廳」標籤的既有圖示,
 // 理由同該檔案的既有慣例——同樣的類型概念在不同地方出現時圖示要一致)。
 export const CURATED_CATEGORY_ICONS: Record<CuratedCategory, typeof Coffee> = {
@@ -33,13 +33,13 @@ export const CURATED_CATEGORY_ICONS: Record<CuratedCategory, typeof Coffee> = {
 
 // CURATED_CATEGORY_MAP_CLASS:地圖上精選點圓點(geoAttractionOverlay.ts
 // 的 geo-attraction-curated-dot)依分類套用的固定字串 modifier class,
-// 對應到 GeoOutlineMap.module.css 的顏色定義——理由同該檔案開頭對「這批
+// 對應到 ExploreMap.module.css 的顏色定義——理由同該檔案開頭對「這批
 // class 是 innerHTML 動態組裝、必須用固定字串」的說明,這裡沿用同一套
 // 命名慣例。顏色選用既有的、已有淺/深色雙版本定義的 base-ui.css token
 // (不新增色票):tea 沿用圓點原本的 --ios-sand(暖沙棕,茶屋暖意);
 // restaurant 用 --color-accent(硃紅,飲食聯想);craft 以 --ios-blue
 // (大地棕,店舖/工藝)為基底、在 CSS 端 color-mix 壓暗一階(理由見
-// GeoOutlineMap.module.css 的 -craft 規則——原色跟 tea 的暖沙棕色相太近,
+// ExploreMap.module.css 的 -craft 規則——原色跟 tea 的暖沙棕色相太近,
 // 14px 圓點分不出來);street 用 --ios-green(苔綠,街景/戶外聯想)。
 export const CURATED_CATEGORY_MAP_CLASS: Record<CuratedCategory, string> = {
   tea: 'geo-attraction-curated-dot-tea',

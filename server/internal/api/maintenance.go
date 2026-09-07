@@ -501,3 +501,33 @@ func (s *Server) handleMaintenanceAttractionUpdatePlaceID(w http.ResponseWriter,
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "placeId": in.PlaceID})
 }
+
+// PATCH /internal/maintenance/attractions/{id}/theme
+// Body: {"isTheme": true}
+//
+// 供 tripace-cli 的 attraction-set-theme 指令使用(見
+// store.UpdateAttractionTheme)——讓既有已建檔的景點區域(is_theme 欄位
+// 剛新增時,不論原本 level 是多少,全部預設為 false)也能事後補上正確的
+// 「主題點/精選點」分類(散策羅盤用語,見 model.Attraction.IsTheme 欄位
+// 註解)。獨立端點而非塞進通用的 .../field(見
+// handleMaintenanceAttractionUpdateField 的白名單機制)——理由同
+// place-id/coords 各自獨立端點的既有慣例:attractionUpdatableFields 白
+// 名單只收字串型欄位,is_theme 是布林型,不適合共用同一個通用機制。
+func (s *Server) handleMaintenanceAttractionUpdateTheme(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, "invalid_input", "缺少景點 ID")
+		return
+	}
+	var in struct {
+		IsTheme bool `json:"isTheme"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	if err := s.store.UpdateAttractionTheme(id, in.IsTheme); err != nil {
+		writeErr(w, http.StatusInternalServerError, "update_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "isTheme": in.IsTheme})
+}

@@ -10,7 +10,7 @@ import styles from './PhotoCarousel.module.css'
 // 等位移量明確超過這個門檻才判斷「這次手勢主要是水平還是垂直」。
 const DIRECTION_LOCK_THRESHOLD_PX = 6
 
-// PhotoCarousel:GeoInfoPanel.tsx 照片顯示區域的抽出元件——「點擊地圖上
+// PhotoCarousel:PlacePanel.tsx 照片顯示區域的抽出元件——「點擊地圖上
 // Google 原生 POI 圖標」這個來源(poiInfoContent,見 geoInfoContent.ts)的
 // 後端回應改成 Google/Pexels 兩種來源並列的多圖清單(見 handleGeoPlaceDetails
 // 的說明),這個元件負責把兩份清單合併成一份「先 Google 後 Pexels」的
@@ -32,10 +32,10 @@ const DIRECTION_LOCK_THRESHOLD_PX = 6
 //       操作方式,手機版使用者不需要瞄準小按鈕。頁碼用圓點呈現(以
 //       IntersectionObserver 判斷目前捲動到哪一張最靠近可視範圍中心)。
 //
-// fallbackUrl:兩份清單合併結果為空時的相容 fallback——GeoInfoContent.
+// fallbackUrl:兩份清單合併結果為空時的相容 fallback——PlaceInfoContent.
 // photoUrl(見該型別的說明)本身可能是單一舊格式來源(地點清單/候選籃
 // 項目)的唯一照片,這個元件統一收斂「該顯示什麼」的判斷,呼叫端
-// (GeoInfoPanel.tsx)不需要自己判斷要不要繞過這個元件直接畫 <img>。
+// (PlacePanel.tsx)不需要自己判斷要不要繞過這個元件直接畫 <img>。
 export function PhotoCarousel({
   googlePhotoUrls,
   pexelsPhotoUrls,
@@ -56,7 +56,7 @@ export function PhotoCarousel({
   // 效果改由 .swipeItem 逐張處理(像相簿卡片一張張滑,同樣是使用者
   // 明確要求)。PhotoCarousel 本身不知道外層容器套了多少 padding,故
   // 不用固定負 margin 硬編碼去抵銷,改由呼叫端根據這個回呼決定要不要
-  // 套 padding——桌面版(GeoInfoPanel.tsx)固定滿版顯示,不需要這個
+  // 套 padding——桌面版(PlacePanel.tsx)固定滿版顯示,不需要這個
   // 機制,不傳這個 prop 即可。
   onLayoutChange?: (isMobileSwipe: boolean) => void
 }) {

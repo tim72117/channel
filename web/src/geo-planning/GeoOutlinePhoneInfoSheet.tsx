@@ -2,7 +2,7 @@ import { useEffect, useReducer, useState } from 'react'
 import { Check, Plus, X } from 'lucide-react'
 import type { ClientConfig, GeoAttraction, GeoPlaceDetails } from '../api'
 import { fetchGeoPlaceDetails } from '../api'
-import type { GeoInfoContent } from './GeoInfoPanel'
+import type { PlaceInfoContent } from './PlacePanel'
 import { attractionBadges } from './geoInfoContent'
 import { candidateHasScheduledDate, type GeoCandidate } from './geoCandidateHelpers'
 import { reduceAddCandidateUiState, initialAddCandidateUiState } from './geoAddCandidateState'
@@ -33,7 +33,7 @@ const SHEET_MIN_HEIGHT = 100
 const SHEET_SNAP_POINTS = [400, 80]
 
 // GeoOutlinePhoneInfoSheet:手機版規劃地圖資訊卡,從畫面下方滑入蓋住下
-// 半部——桌面版對應的 GeoInfoPanel/AttractionInfoPanel 是絕對定位疊在
+// 半部——桌面版對應的 PlacePanel/AttractionInfoPanel 是絕對定位疊在
 // 地圖右緣的浮動卡片,手機螢幕沒有那個空間,改用 bottom sheet(同 iOS/
 // Material Design 地圖 App 的資訊卡呈現方式)。
 //
@@ -56,7 +56,7 @@ const SHEET_SNAP_POINTS = [400, 80]
 // 版面),改成固定高度後不再有這個問題。
 //
 // 第二階段新增候選籃相關按鈕與互動(第一階段唯讀瀏覽時特意拿掉,見舊版
-// 註解)——「加入候選」按鈕行為對齊桌面版 GeoInfoPanel.tsx 的
+// 註解)——「加入候選」按鈕行為對齊桌面版 PlacePanel.tsx 的
 // handleAddClick 分岔邏輯,但簡化掉「懸浮選單 vs 展開日曆」的位置量測
 // (dateMenuOpenUp,桌面版是因為卡片可能出現在視窗下半部、選單需要
 // 動態翻轉方向;這裡的 bottom sheet 本身已經是從下滑入、卡片內容本來就
@@ -70,7 +70,7 @@ const SHEET_SNAP_POINTS = [400, 80]
 //     (GeoOutlinePhoneDatePickerSheet.tsx,顯示既有日期的縱向可捲動清單
 //     + 「其他日期」選項);完全沒有排定日期則跳過清單、直接開日曆 sheet
 //     (GeoOutlinePhoneDateCalendarSheet.tsx,DatePickerPopover 月曆格線
-//     UI,對齊桌面版 GeoInfoPanel.tsx 的既有升級)。
+//     UI,對齊桌面版 PlacePanel.tsx 的既有升級)。
 //
 // 2026-08 之前,這兩層日期選擇 UI(既有日期 chips/日期輸入)是內嵌在這個
 // 元件的 `.dateEdit` 區塊裡,由 addUi.mode==='open' 控制展開——這次改成
@@ -102,7 +102,7 @@ export function GeoOutlinePhoneInfoSheet({
   onDraggingDownChange,
   onSnapIndexChange,
 }: {
-  content: GeoInfoContent | null
+  content: PlaceInfoContent | null
   attraction: GeoAttraction | null
   // cfg:attraction.placeId 有值時,用來呼叫 fetchGeoPlaceDetails 補查
   // 「地點照片漸進補圖機制」的雙來源照片——理由同桌面版
@@ -112,7 +112,7 @@ export function GeoOutlinePhoneInfoSheet({
   cfg: ClientConfig
   onClose: () => void
   // onAddCandidate:候選已有排定日期時直接加入候選籃(純前端,不寫入
-  // 後端)——理由同桌面版 GeoInfoPanel.tsx 的同名 prop。這條路徑完全不
+  // 後端)——理由同桌面版 PlacePanel.tsx 的同名 prop。這條路徑完全不
   // 經過日期選擇 sheet,維持這次改動前的既有行為不動(見 handleAddClick
   // 的說明)。
   onAddCandidate?: (candidate: GeoCandidate) => void
@@ -257,7 +257,7 @@ export function GeoOutlinePhoneInfoSheet({
   // effect 的完整說明),沒有 placeId 時維持只有單一 landmarkPhotoUrl——
   // PhotoCarousel 收到兩份清單皆為 undefined(或查詢中/查無結果)時會
   // fallback 回 photoUrl 顯示單張,理由同 AttractionInfoPanel.tsx/
-  // GeoInfoPanel.tsx 的既有慣例。
+  // PlacePanel.tsx 的既有慣例。
   const photoUrl = attraction ? attraction.landmarkPhotoUrl : content!.photoUrl
   const googlePhotoUrls = attraction ? (attractionPlaceId ? placeDetails?.googlePhotoUrls : undefined) : content!.googlePhotoUrls
   const pexelsPhotoUrls = attraction ? (attractionPlaceId ? placeDetails?.pexelsPhotoUrls : undefined) : content!.pexelsPhotoUrls
@@ -271,7 +271,7 @@ export function GeoOutlinePhoneInfoSheet({
   const candidate = attraction ? undefined : content!.candidate
 
   // handleAddClick:「加入 {tripName}」按下時的分岔——理由同桌面版
-  // GeoInfoPanel.tsx 的 handleAddClick,見上方元件說明。候選已有排定
+  // PlacePanel.tsx 的 handleAddClick,見上方元件說明。候選已有排定
   // 日期這條分支直接算「加入成功」,dispatch 'added' 顯示提示;候選沒有
   // 日期的分支不再由這個元件自己展開內部區塊,改成呼叫 onOpenDatePicker
   // 通知呼叫端——實際選定日期、呼叫 onSchedule 寫入候選的邏輯(對應舊版

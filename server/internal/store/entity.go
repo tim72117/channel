@@ -77,6 +77,11 @@ type attractionRow struct {
 	Lat          float64 `gorm:"column:lat;not null;index:idx_attractions_lat_lng,priority:1"`
 	Lng          float64 `gorm:"column:lng;not null;index:idx_attractions_lat_lng,priority:2"`
 	Level        int     `gorm:"column:level;not null"`
+	// IsTheme:見 model.Attraction.IsTheme 的完整說明——與 Level 並存,不
+	// 取代它。default:false 只影響 AutoMigrate 新增這個欄位時既有資料列
+	// 的補值,新資料一律由 CreateAttraction/CreateAttractionWithID 明確
+	// 帶入,不依賴這個 DB 層預設值(理由同其餘欄位一貫的顯式帶入慣例)。
+	IsTheme      bool    `gorm:"column:is_theme;not null;default:false"`
 	RadiusMeters int     `gorm:"column:radius_meters;not null;default:0"`
 	Summary      *string `gorm:"column:summary"`
 	PhotoURL     *string `gorm:"column:photo_url"`

@@ -2,12 +2,12 @@
 // 行為——mock 掉 GeoOutlinePanel(這個測試不驗證地圖/查詢本身怎麼運作,
 // 只驗證 GeoOutlinePhoneView 收到 onSearchResultsChange 回呼後,
 // listDrawerOpen 有沒有正確變成 true),讓測試能直接觸發這個 callback、
-// 不需要 render 真正的地圖(GeoOutlineMap 依賴 @googlemaps/js-api-loader、
-// 建圖流程複雜,見 GeoOutlineMap.poiClick.test.tsx 的既有先例)。
+// 不需要 render 真正的地圖(ExploreMap 依賴 @googlemaps/js-api-loader、
+// 建圖流程複雜,見 ExploreMap.poiClick.test.tsx 的既有先例)。
 //
 // 背景:2026-08 三個地點搜尋入口(城市搜尋框/類別標籤/搜尋這個區域按鈕)
 // 統一改走 fetchGeoGeocode 後,類別標籤/搜尋這個區域改成直接呼叫
-// GeoOutlineMap 內部的 runPlacesQuery,不再經過 GeoOutlinePanel 的
+// ExploreMap 內部的 runPlacesQuery,不再經過 GeoOutlinePanel 的
 // onSearch prop——而「查詢觸發時開啟清單抽屜並顯示載入中」這個副作用
 // 原本寫在 onSearch 裡(見 GeoOutlinePhoneView.tsx 的說明),繞開
 // onSearch 的入口因此連帶漏掉了「打開清單」這個隱藏副作用,使用者實測
@@ -94,7 +94,7 @@ describe('GeoOutlinePhoneView：查詢完成後自動打開地點清單抽屜', 
     expect(isListDrawerOpen(container)).toBe(false)
 
     // 不呼叫 capturedOnSearch()——比照類別標籤/搜尋這個區域按鈕現在的
-    // 實際呼叫路徑(GeoOutlineMap 內部的 runPlacesQuery 觸發時呼叫
+    // 實際呼叫路徑(ExploreMap 內部的 runPlacesQuery 觸發時呼叫
     // onSearchStart,不經過 GeoOutlinePanel 的 onSearch prop)。2026-08
     // 這次 sheetStack 重構後,「查詢開始」這個時機本身(不是查詢結果回來)
     // 才是清單被 push 進堆疊的時刻(見 GeoOutlinePhoneView.tsx 的

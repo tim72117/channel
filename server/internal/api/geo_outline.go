@@ -346,6 +346,11 @@ type attractionResponse struct {
 	RadiusMeters     int     `json:"radiusMeters,omitempty"`
 	Summary          string  `json:"summary,omitempty"`
 	Level            int     `json:"level,omitempty"`
+	// IsTheme:見 model.Attraction.IsTheme 的完整說明。跟 Level 一樣只有
+	// 走資料庫路徑才有意義,故沒有用 omitempty——false 是合法值(代表
+	// 「這是精選點」),omitempty 會讓前端收到的 JSON 完全沒有這個欄位,
+	// 跟「這筆資料來自沒有主題概念的 Google Places 後備路徑」混淆不清。
+	IsTheme bool `json:"isTheme"`
 	// PlaceID:只有走 store.ListAttractionsByCity/ListAttractionsNearby
 	// 這條人工建檔資料路徑、且該筆 model.Attraction.PlaceID 有值時才會有
 	// 值——即時查 Google Places 的 toAttractionResponses 路徑(geo.District
@@ -402,6 +407,7 @@ func (s *Server) handleGeoAttractions(w http.ResponseWriter, r *http.Request) {
 				Lng:          l.Lng,
 				RadiusMeters: l.RadiusMeters,
 				Level:        l.Level,
+				IsTheme:      l.IsTheme,
 			}
 			if l.Summary != nil {
 				ar.Summary = *l.Summary
@@ -850,6 +856,7 @@ func (s *Server) listAttractionResponses(lat, lng, radiusMeters float64) ([]attr
 			Lng:          l.Lng,
 			RadiusMeters: l.RadiusMeters,
 			Level:        l.Level,
+			IsTheme:      l.IsTheme,
 		}
 		if l.Summary != nil {
 			ar.Summary = *l.Summary

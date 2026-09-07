@@ -4,7 +4,7 @@
 // 這件事從「顯示與否直接看 hideCategoryTags 這個布林值」的做法,收斂成
 // 明確事件驅動的狀態機。
 //
-// 背景:原本 GeoOutlineMap.tsx 用一個布林運算式決定標籤列顯示與否——
+// 背景:原本 ExploreMap.tsx 用一個布林運算式決定標籤列顯示與否——
 // 手機版 hideCategoryTags 直接吃 listDrawerState.open(清單開關狀態機的
 // 衍生值),桌面版沒有傳這個 prop 時退回 searchResults.length > 0——
 // 兩邊各自一套邏輯,且都是「結果有沒有東西」的衍生值,不是「查詢開始

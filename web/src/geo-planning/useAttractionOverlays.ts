@@ -3,21 +3,23 @@ import type { GeoAttraction } from '../api'
 import { geoItemKey, type GeoSelectedKey } from './GeoHotelSidebar'
 import {
   getAttractionOverlayClass,
-  maxLevelForZoom,
   type AttractionOverlayInstance,
 } from './geoAttractionOverlay'
 import { isMarkerCandidate, isMarkerSelected } from './geoMarkerSelection'
 
-// useAttractionOverlays——從 GeoOutlineMap.tsx 抽出來的景點區域光暈圖層。
+// useAttractionOverlays——從 ExploreMap.tsx 抽出來的景點區域光暈圖層。
 // 只讀 mapRef/mapReady/自己的資料(attractions)/selectedKey/hoverKey/
-// candidateKeys/zoom,不寫入任何其他共享狀態,是這個地圖元件裡最自成
-// 一體的一塊,故獨立成 hook 不影響其餘查詢/地圖生命週期邏輯。內部行為
-// (含全部原有註解說明)原封不動搬過來,搬動本身不改變任何行為。
+// candidateKeys,不寫入任何其他共享狀態,是這個地圖元件裡最自成一體的
+// 一塊,故獨立成 hook 不影響其餘查詢/地圖生命週期邏輯。內部行為(含全部
+// 原有註解說明)原封不動搬過來,搬動本身不改變任何行為。不再接收 zoom
+// prop——原本只用來算 maxLevelForZoom 判斷主題點是否隨縮放層級隱藏,
+// 但主題點(level===1)在該函式定義下恆通過,等於本來就是恆顯示,這層
+// zoom 判斷已被移除(見下方 filteredAttractions 的完整說明),故不再
+// 需要呼叫端傳入 zoom。
 export function useAttractionOverlays({
   mapRef,
   mapReady,
   attractions,
-  zoom,
   selectedKey,
   hoverKey,
   candidateKeys,
@@ -28,7 +30,6 @@ export function useAttractionOverlays({
   mapRef: React.RefObject<google.maps.Map | null>
   mapReady: boolean
   attractions: GeoAttraction[]
-  zoom: number
   selectedKey?: GeoSelectedKey
   hoverKey?: GeoSelectedKey
   candidateKeys?: Set<string>
@@ -42,38 +43,43 @@ export function useAttractionOverlays({
   // 照片」這個 DOM 結構層級的切換,只對精選點有意義(主題點永遠顯示
   // 照片,見 setHovered 對 isTheme 的忽略邏輯)。
   // revealedAttractionNames:主題點/精選點分級(2026-08,使用者明確要求)
-  // ——level === 1 視為「主題點」,其餘(2/3/…)視為「精選點」,精選點
-  // 預設不在地圖上顯示,只有使用者點開某個主題點、呼叫端(DesktopLayout.tsx
-  // 的 revealedAttractionNames)依附近距離算出這個名稱集合後,對應的精選
-  // 點才會出現在地圖上——見下方 filteredAttractions 的判斷式。undefined/
-  // null 代表目前沒有開啟任何主題,精選點一律不顯示。暫不新增後端欄位
-  // 區分主題/精選(見 docs/research-curated-attraction-relationships-2026-08.md
-  // 的方向 C 結論:先用既有 level 表達,之後若證明不夠用再考慮專屬欄位)。
+  // ——isTheme(model.Attraction.IsTheme,見該欄位完整說明)為 true 視為
+  // 「主題點」,其餘視為「精選點」,精選點預設不在地圖上顯示,只有使用者
+  // 點開某個主題點、呼叫端(DesktopLayout.tsx 的 revealedAttractionNames)
+  // 依附近距離算出這個名稱集合後,對應的精選點才會出現在地圖上——見下方
+  // filteredAttractions 的判斷式。undefined/null 代表目前沒有開啟任何
+  // 主題,精選點一律不顯示。原本(2026-08 前)這個分級直接借用 level===1
+  // 表達(見 docs/research-curated-attraction-relationships-2026-08.md
+  // 的方向 C 結論),現已改用獨立的 isTheme 欄位,不再依賴 level 數字
+  // ——level 保留給地圖 zoom 顯示門檻/知名度描述使用,兩種語意不再混在
+  // 同一個欄位。
   revealedAttractionNames?: Set<string> | null
   hoveredCuratedName?: string | null
 }) {
   const overlaysRef = useRef<AttractionOverlayInstance[]>([])
   const radiusCirclesRef = useRef<google.maps.Circle[]>([])
 
-  // filteredAttractions:主題點(level === 1)維持原本「依 zoom 對應的
-  // 知名度分級上限」規則——level 1 在 maxLevelForZoom 的定義下恆通過
-  // (見該函式說明),等於主題點不論 zoom 都顯示,這點沒有改變舊行為。
-  // 精選點(level 不是 1、也不是 null)不再吃 zoom 分級,改成完全由
-  // revealedAttractionNames 這個集合決定要不要顯示——只有揭露它的那個
-  // 主題點被開啟時,這批精選點才會出現在地圖上,不受使用者當下 zoom
-  // 到哪一層影響(理由同呼叫端 nearbyAttractions 的說明:這是「進入
-  // 主題後才依附近距離顯示精選點」,不是傳統的知名度分級揭露)。沒有
-  // level 資訊的景點區域(即時查 Google Places 的結果)一律顯示,不受
-  // 這整套主題/精選規則影響——這批資料沒有分級可言,無從歸類。用
-  // useMemo 快取的理由(避免不必要的重畫/閃爍)同舊版說明,不變。
-  const maxLevel = maxLevelForZoom(zoom)
+  // filteredAttractions:主題點(isTheme===true)恆顯示,不受 zoom 影響
+  // ——這點延續舊行為不變(舊版用 level===1 搭配 maxLevelForZoom 判斷,
+  // 但 level 1 在該函式定義下恆通過,等於本來就是恆顯示,只是繞了一層
+  // 數字比較,現在改用 isTheme 後這層繞路已無必要,一併移除)。精選點
+  // (isTheme===false)不吃 zoom 分級,完全由 revealedAttractionNames 這個
+  // 集合決定要不要顯示——只有揭露它的那個主題點被開啟時,這批精選點才會
+  // 出現在地圖上,不受使用者當下 zoom 到哪一層影響(理由同呼叫端
+  // nearbyAttractions 的說明:這是「進入主題後才依附近距離顯示精選點」,
+  // 不是傳統的知名度分級揭露)。沒有 level 資訊的景點區域(即時查 Google
+  // Places 的結果,同時 isTheme 固定是 false,見 GeoAttraction.isTheme 的
+  // 完整說明)一律顯示,不受這整套主題/精選規則影響——這批資料沒有
+  // 主題概念可言,無從歸類,故仍需保留 level == null 這個判斷式,不能只看
+  // isTheme。用 useMemo 快取的理由(避免不必要的重畫/閃爍)同舊版說明,
+  // 不變。
   const filteredAttractions = useMemo(
     () => attractions.filter((d) => {
       if (d.level == null) return true
-      if (d.level === 1) return d.level <= maxLevel
+      if (d.isTheme) return true
       return revealedAttractionNames?.has(d.name) ?? false
     }),
-    [attractions, maxLevel, revealedAttractionNames],
+    [attractions, revealedAttractionNames],
   )
 
   // 點擊地標圖示只開介紹卡(見 onAttractionSelect),不移動/縮放地圖——
@@ -81,7 +87,7 @@ export function useAttractionOverlays({
   // 區域的範圍,但這會打斷使用者原本瀏覽地圖的視角(尤其在已經手動調整過
   // 範圍的情況下),點擊圖示的意圖是「看這個地點的介紹」,不是「把我帶
   // 過去那裡」。地圖移動仍保留給明確以此為意圖的入口:AttractionInfoPanel
-  // 「探索周邊」按鈕(見 GeoOutlineMap 的 handleExploreAttraction,複用
+  // 「探索周邊」按鈕(見 ExploreMap 的 handleExploreAttraction,複用
   // planAttractionClick 的同一套決策邏輯)。
   const handleAttractionClick = useCallback((d: GeoAttraction) => {
     onAttractionSelect?.(d)

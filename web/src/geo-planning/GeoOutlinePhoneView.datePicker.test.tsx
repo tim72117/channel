@@ -20,7 +20,7 @@
 // 路徑不需要真的打後端。
 //
 // 日曆 sheet 改用 DatePickerPopover(react-day-picker 月曆格線 UI,對齊
-// 桌面版 GeoInfoPanel.tsx 的既有升級,見該檔案 GeoInfoPanel.test.tsx 的
+// 桌面版 PlacePanel.tsx 的既有升級,見該檔案 PlacePanel.test.tsx 的
 // pickCalendarDate 輔助函式)——沿用同一套「用 aria-label 定位日期格子」
 // 的既有測試手法,不是原生 <input type="date">。
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -100,11 +100,11 @@ function openInfoSheet(container: HTMLElement) {
   expect(sheetPanels(container)).toHaveLength(1)
 }
 
-// pickCalendarDate:比照 GeoInfoPanel.test.tsx 的既有輔助函式——
+// pickCalendarDate:比照 PlacePanel.test.tsx 的既有輔助函式——
 // react-day-picker 的日期格子沒有穩定的 test id,只有 aria-label(格式
 // 「YYYY年M月D日 星期X」,若該格剛好是「今天」還會多出「今天,」前綴,
 // 見下方 pickThisMonthDay 特意避開今天的說明)可以精確定位,只在同一個
-// 月份內選日期,不處理跨月換頁。這裡不用 `^` 錨定開頭(GeoInfoPanel.test.tsx
+// 月份內選日期,不處理跨月換頁。這裡不用 `^` 錨定開頭(PlacePanel.test.tsx
 // 原本的寫法),改用不錨定的子字串比對,對「今天」那格的「今天,」前綴
 // 更寬容,不影響其餘日期格的精確比對(月份/日期組合在同一個月內不會
 // 重複)。

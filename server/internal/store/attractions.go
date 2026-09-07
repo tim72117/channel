@@ -23,6 +23,7 @@ func toAttraction(r attractionRow) model.Attraction {
 		Lat:          r.Lat,
 		Lng:          r.Lng,
 		Level:        r.Level,
+		IsTheme:      r.IsTheme,
 		RadiusMeters: r.RadiusMeters,
 		Summary:      r.Summary,
 		PhotoURL:     r.PhotoURL,
@@ -42,6 +43,7 @@ func (s *Store) CreateAttraction(in model.Attraction) (model.Attraction, error) 
 		Lat:          in.Lat,
 		Lng:          in.Lng,
 		Level:        in.Level,
+		IsTheme:      in.IsTheme,
 		RadiusMeters: in.RadiusMeters,
 		Summary:      in.Summary,
 		PhotoURL:     in.PhotoURL,
@@ -71,6 +73,7 @@ func (s *Store) CreateAttractionWithID(in model.Attraction) (model.Attraction, e
 		Lat:          in.Lat,
 		Lng:          in.Lng,
 		Level:        in.Level,
+		IsTheme:      in.IsTheme,
 		RadiusMeters: in.RadiusMeters,
 		Summary:      in.Summary,
 		PhotoURL:     in.PhotoURL,
@@ -84,7 +87,7 @@ func (s *Store) CreateAttractionWithID(in model.Attraction) (model.Attraction, e
 	return toAttraction(r), nil
 }
 
-// UpdateAttractionFields 用來源方版本覆蓋目的方既有記錄的全部 8 個比對
+// UpdateAttractionFields 用來源方版本覆蓋目的方既有記錄的全部比對
 // 欄位(見 attractionsync.CompareFields 的欄位清單)——同步機制的「兩邊
 // 都有、內容不同」情境用來源方版本覆蓋目的方,不是欄位級局部更新,
 // 因此一次覆蓋全部比對欄位,不像 UpdateAttractionPhoto 只動單一欄位。
@@ -105,6 +108,7 @@ func (s *Store) UpdateAttractionFields(in model.Attraction) error {
 			"lat":           in.Lat,
 			"lng":           in.Lng,
 			"level":         in.Level,
+			"is_theme":      in.IsTheme,
 			"radius_meters": in.RadiusMeters,
 			"summary":       in.Summary,
 			"photo_url":     in.PhotoURL,
@@ -245,6 +249,21 @@ func (s *Store) UpdateAttractionCoords(id string, lat, lng float64) error {
 	return s.db.Model(&attractionRow{}).
 		Where("id = ?", id).
 		Updates(map[string]any{"lat": lat, "lng": lng, "updated_at": now()}).Error
+}
+
+// UpdateAttractionTheme 更新一筆景點區域是否為「主題點」(散策羅盤用語,
+// 見 model.Attraction.IsTheme 欄位註解)。只更新 is_theme 與 updated_at
+// 兩欄,不動其餘欄位——這支方法專門服務 CLI 的 attraction-set-theme
+// 指令,讓既有已建檔的 attraction(is_theme 欄位剛新增時全部預設為
+// false,不論原本 level 是多少)也能事後補上正確的主題點/精選點分類,
+// 不適合塞進 attractionUpdatableFields(該白名單只收字串型欄位,
+// is_theme 是布林型)。isTheme 允許明確傳 true 或 false(不像
+// UpdateAttractionPlaceID 的空字串代表清空——布林值沒有「清空」的
+// 語意,一律是明確的 true/false 覆蓋)。
+func (s *Store) UpdateAttractionTheme(id string, isTheme bool) error {
+	return s.db.Model(&attractionRow{}).
+		Where("id = ?", id).
+		Updates(map[string]any{"is_theme": isTheme, "updated_at": now()}).Error
 }
 
 // attractionUpdatableFields 是 UpdateAttractionField 允許寫入的欄位白

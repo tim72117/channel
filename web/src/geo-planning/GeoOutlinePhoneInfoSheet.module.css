@@ -66,7 +66,7 @@
 
 /* imageWrap:placeholder/單張圖片情境的預設樣式——圖片左右留間距,
    不再滿版貼齊卡片邊緣(使用者明確要求),padding 對齊 .head/.content
-   的水平留白(16px)。桌面版 GeoInfoPanel 的圖片本身沒有圓角(滿版貼齊
+   的水平留白(16px)。桌面版 PlacePanel 的圖片本身沒有圓角(滿版貼齊
    卡片頂部,靠 .panel 本身裁邊角),圓角是手機版特有的視覺(使用者明確
    要求),故不改 PhotoCarousel.module.css 共用樣式(那樣會連帶影響
    桌面版),改在這層容器加 border-radius+overflow:hidden——

@@ -327,6 +327,7 @@ func (s *Server) Routes() http.Handler {
 	internalMux.HandleFunc("PATCH /internal/maintenance/attractions/{id}/coords", s.handleMaintenanceAttractionUpdateCoords)
 	internalMux.HandleFunc("PATCH /internal/maintenance/attractions/{id}/field", s.handleMaintenanceAttractionUpdateField)
 	internalMux.HandleFunc("PATCH /internal/maintenance/attractions/{id}/place-id", s.handleMaintenanceAttractionUpdatePlaceID)
+	internalMux.HandleFunc("PATCH /internal/maintenance/attractions/{id}/theme", s.handleMaintenanceAttractionUpdateTheme)
 	// 景點資料同步機制新增的端點(見 attraction_sync.go、
 	// docs/ATTRACTION_SYNC_DESIGN.md)——專門服務
 	// server/internal/attractionsync 套件的三層比對 + 交握式傳輸,不是

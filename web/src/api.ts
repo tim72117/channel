@@ -394,8 +394,18 @@ export interface GeoAttraction {
   // level:知名度分級,1(國際)~5(在地),只有走後端資料庫路徑
   // (server/internal/api/geo_outline.go 的 store.ListAttractionsByCity)
   // 才會有值——即時查 Google Places 的結果沒有分級資訊,固定不帶這個
-  // 欄位。前端依此決定隨縮放層級顯示哪些粒度,見 GeoOutlineMap.tsx。
+  // 欄位。前端依此決定隨縮放層級顯示哪些粒度,見 ExploreMap.tsx。
   level?: number
+  // isTheme:是否為「主題點」(散策羅盤用語,見 useAttractionOverlays.ts
+  // 的完整說明)——後端 model.Attraction.IsTheme 新增欄位,與 level 並存
+  // (level 保留給 zoom 顯示門檻/知名度描述使用,不再依賴 level===1 判斷
+  // 主題點)。跟 level 不同,這個欄位後端固定回傳(沒有 omitempty),即時
+  // 查 Google Places 的路徑(toAttractionResponses/geo.District)沒有主題
+  // 概念,一律回傳 false,前端判斷「是否顯示這批精選點」時仍需搭配
+  // level == null(見 useAttractionOverlays.ts 的 filteredAttractions)
+  // 才能正確識別「這批資料完全沒有主題/分級概念,一律顯示」的情況,不能
+  // 只看 isTheme 是否為 true。
+  isTheme: boolean
   // placeId:這個景點區域對應的 Google Place ID,只有走後端資料庫路徑
   // (人工建檔的 model.Attraction 有設定 place_id)才會有值——即時查
   // Google Places 的結果(toAttractionResponses/geo.District)沒有這個
@@ -452,10 +462,10 @@ export function fetchGeoAttractions(cfg: ClientConfig, city: string) {
 // 幾乎重複的型別與 state,這是實際發生過的重複——2026-08
 // 起兩者合併,GeoPlace 整個移除,全部改用這個型別。primaryType 選填
 // (bias 模式呼叫端目前不會填,只有 restrict 模式的呼叫端——見
-// GeoOutlineMap.tsx 的 runPlacesQuery——會帶入,固定空字串,理由同原本
+// ExploreMap.tsx 的 runPlacesQuery——會帶入,固定空字串,理由同原本
 // GeoPlace 分支的既有慣例);category 同樣選填,值域固定是
 // 'lodging'/'tourist_attraction'/'restaurant' 其中之一(對齊地圖上方
-// 類別標籤,見 GeoOutlineMap.tsx 的 CATEGORY_TAGS),只有 restrict 模式
+// 類別標籤,見 ExploreMap.tsx 的 CATEGORY_TAGS),只有 restrict 模式
 // 查出來的候選才會有值,查無對應分類或 bias 模式查出來的候選則為
 // undefined。前端分類判斷(圖示、entry kind 推導等)一律讀 category,不
 // 要自己解讀 primaryType——直接拿 primaryType 跟這三個查詢用的類型字面
@@ -536,7 +546,7 @@ export function fetchGeoAttractionsNearby(cfg: ClientConfig, lat: number, lng: n
 // 對齊 server 的 GET /internal/geo/attractions/nearby-only
 // (handleGeoAttractionsOnlyNearby)——跟 fetchGeoAttractionsNearby 查同一份
 // 景點區域資料,但不附帶 hotels(即時查 Google Places、直接計費)。這支
-// 端點查詢本身免費,故 GeoOutlineMap.tsx 用它做地圖 idle(拖曳/縮放停止)
+// 端點查詢本身免費,故 ExploreMap.tsx 用它做地圖 idle(拖曳/縮放停止)
 // 時的自動查詢,不需要像飯店那樣收在使用者明確按下「搜尋這個區域」
 // 按鈕之後才觸發。
 export function fetchGeoAttractionsOnlyNearby(cfg: ClientConfig, lat: number, lng: number, radiusMeters?: number) {
@@ -555,7 +565,7 @@ export function fetchGeoAttractionsOnlyNearby(cfg: ClientConfig, lat: number, ln
 // 來源不同(自建資料庫+Google Places nearby / Google Places Text
 // Search geocoding),但對前端而言都是「使用者搜尋或瀏覽時查到的地點」,
 // 理應共用同一份清單 state、同一套點擊/選取邏輯,不該在
-// GeoOutlineMap/GeoOutlinePanel/DesktopLayout/手機版分別維護三條平行的
+// ExploreMap/GeoOutlinePanel/DesktopLayout/手機版分別維護三條平行的
 // state 與 callback(這是實際發生過的問題:三者行為逐漸各自演化,飯店
 // 清單意外變成即時依可視範圍過濾,導致清單項目點擊後永遠已經在畫面
 // 內、地圖移動邏輯形同虛設)。kind 判別欄位保留「這筆結果原本是哪種
@@ -586,7 +596,7 @@ export function hotelToSearchResult(h: GeoHotel): GeoSearchResult {
   return { kind: 'hotel', name: h.name, address: h.address, lat: h.lat, lng: h.lng, photoUrl: h.photoUrl }
 }
 // placeToSearchResult:kind:'place' 的搜尋結果(地圖上方類別標籤/「搜尋
-// 這個區域」按鈕查到的候選,見 GeoOutlineMap.tsx 的 runPlacesQuery)轉成
+// 這個區域」按鈕查到的候選,見 ExploreMap.tsx 的 runPlacesQuery)轉成
 // GeoSearchResult——來源型別跟 geocodeCandidateToSearchResult 相同,都是
 // GeoGeocodeCandidate(2026-08 起合併,見該型別的完整說明),只有 kind
 // 判別欄位不同,故仍拆成兩支函式,不合併成一支——kind 由呼叫端的查詢
@@ -599,7 +609,7 @@ export function geocodeCandidateToSearchResult(c: GeoGeocodeCandidate): GeoSearc
 }
 
 // GeoTripEntry:旅程本身已有座標的 entry,轉成地理輪廓底圖圖層通用的
-// name/lat/lng 形狀,供 GeoOutlineMap 畫 marker、GeoCandidateSidebar
+// name/lat/lng 形狀,供 ExploreMap 畫 marker、GeoCandidateSidebar
 // 顯示用——欄位命名對齊 GeoHotel/GeoPlace(而非直接重用 Entry,因為
 // Entry 的欄位是 title/location,語意上屬於旅程資料,不是地理圖層資料,
 // 混用會讓兩套型別的職責模糊)。id 保留供候選籃移除比對用(entry 有
@@ -622,7 +632,7 @@ export interface GeoTripEntry {
 // GeoPlaceDetails:對齊 server 的 GET /internal/geo/place-details
 // (handleGeoPlaceDetails)——單一地點的詳細資訊,供「使用者點擊地圖上
 // Google 原生 POI 圖標」情境使用。原生 POI 點擊只會拿到一個 placeId,
-// 沒有附帶任何名稱/地址/介紹等資料(見 GeoOutlineMap.tsx 攔截
+// 沒有附帶任何名稱/地址/介紹等資料(見 ExploreMap.tsx 攔截
 // IconMouseEvent 的說明),必須再打這支端點查詳細內容。
 export interface GeoPlaceDetails {
   name: string

@@ -115,6 +115,17 @@ type Attraction struct {
 	Lng      float64 `json:"lng"`
 	// Level 是知名度分級,1(國際)~5(在地),見上方型別註解的完整說明。
 	Level int `json:"level"`
+	// IsTheme:是否為「主題點」(散策羅盤用語,見
+	// web/src/geo-planning/useAttractionOverlays.ts 的 isTheme 完整說明)
+	// ——主題點是使用者點開後會揭露周邊「精選點」的錨點,非主題點(精選點)
+	// 預設不在地圖上顯示,只有其對應的主題點被開啟時才會依距離揭露。
+	// 新增這個欄位是因為前端原本直接拿 Level===1 當主題點判斷式,但 Level
+	// 數字分級(1~5)本身還有另一個獨立用途(zoom 顯示門檻/CLI 建檔時的
+	// 知名度描述),兩種語意混在同一個數字欄位裡容易造成「level 代表知名度
+	// 排序」的誤解(見 attractionBadges 已經拿掉顯示「知名度 Lx」的理由)。
+	// 目前跟 Level 並存,不取代它——建檔時預設 IsTheme = (Level == 1),
+	// 但兩者之後可以獨立設定(例如某個 level 2 的地點之後也想設為主題點)。
+	IsTheme bool `json:"isTheme"`
 	// RadiusMeters 是這個景點區域的大致範圍半徑(公尺),0 代表這是單點
 	// 地標(如「101」)而非有範圍的區域(如「古城區」)——前端據此判斷
 	// 要不要在地圖上疊加範圍圓圈。

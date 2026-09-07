@@ -90,6 +90,7 @@ const fakeAttraction: GeoAttraction = {
   name: '測試景點',
   lat: 25.03,
   lng: 121.56,
+  isTheme: false,
 }
 
 const fakeResult: GeoSearchResult = {
