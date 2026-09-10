@@ -2,6 +2,12 @@
 
 本專案先前未維護 CHANGELOG，此檔案從 v0.2.0 開始記錄——之前版本（v0.0.1、v0.1.0、v0.1.1）的異動請直接查對應 tag 的 commit 歷史，不回溯補寫。
 
+## v0.12.2 — 2026-09-10
+
+### 修正
+
+- **`/product` 頁面請求誤回 404**：`server/cmd/server/static.go` 的 `knownRoutePatterns` 白名單漏了同步 `web/src/App.tsx` 已存在的 `/product`（`ProductPage`）路由，導致伺服器誤判成未知路徑、故意回真正的 404 狀態碼——回應內容仍是可正常渲染的 `index.html`，故畫面顯示正常，但瀏覽器開發者工具的 document 請求會顯示 404，可能影響 SEO 收錄判斷。
+
 ## v0.12.1 — 2026-09-02
 
 ### 修正
