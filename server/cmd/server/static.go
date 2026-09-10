@@ -19,6 +19,7 @@ var webDist embed.FS
 // 繼續回 200。
 var knownRoutePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^/$`),
+	regexp.MustCompile(`^/product$`),
 	regexp.MustCompile(`^/privacy$`),
 	regexp.MustCompile(`^/terms$`),
 	regexp.MustCompile(`^/public/[^/]+$`),
